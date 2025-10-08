@@ -8,6 +8,12 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
+# バックエンドAPI連携
+from src.utils.api_client import AIMEEAPIClient
+
+# APIクライアント初期化
+api_client = AIMEEAPIClient()
+
 # ページ設定
 st.set_page_config(
     page_title="AIMEE - 配置調整システム",
@@ -179,33 +185,76 @@ def main():
         """, unsafe_allow_html=True)
         
         if st.button("🔄 データ更新", use_container_width=True):
+            with st.spinner("データ更新中..."):
+                # 少し待機してから更新
+                import time
+                time.sleep(0.5)
             st.rerun()
         if st.button("📋 履歴確認", use_container_width=True):
             st.info("RealWorksで確認してください")
         
         st.markdown("---")
         
-        # システム情報
-        st.markdown("### ℹ️ システム情報")
-        st.metric("稼働率", "98.5%", "2.3%")
-        st.metric("処理済み案件", "1,234件", "156件")
+        # システム情報 (今後実装)
+        # st.markdown("### ℹ️ システム情報")
+        # st.metric("稼働率", "98.5%", "2.3%")
+        # st.metric("処理済み案件", "1,234件", "156件")
     
-    # メインコンテンツ
-    tab1, tab2 = st.tabs(["💬 配置調整アシスタント", "✅ 配置承認"])
-    
-    with tab1:
-        show_chat_interface()
-    
-    with tab2:
-        show_approval_interface()
+    # メインコンテンツ - チャットのみに集中
+    show_chat_interface()
 
 def get_alerts():
-    """アラート情報を取得"""
-    # 実際の実装では、バックエンドAPIから取得
-    return [
-        {"icon": "🔴", "message": "札幌エントリ1工程で遅延発生中"},
-        {"icon": "🟡", "message": "品川で15分後に人員不足予測"}
-    ]
+    """アラート情報を取得（バックエンドAPIから実データ）"""
+    try:
+        # バックエンドAPIからアラート基準チェックを実行
+        result = api_client.check_alerts()
+
+        if "error" in result:
+            # API接続エラー
+            return [
+                {"icon": "⚠️", "message": f"⚠️ API接続エラー: {result['error']}"}
+            ]
+
+        # APIからのアラートを整形
+        alerts_data = []
+        for alert in result.get("alerts", [])[:5]:  # 最大5件表示
+            # アイコンは優先度に応じて設定
+            if alert.get("priority") == "critical":
+                icon = "🔴"
+                color = "red"
+            elif alert.get("priority") == "high":
+                icon = "🟠"
+                color = "orange"
+            elif alert.get("priority") == "medium":
+                icon = "🟡"
+                color = "yellow"
+            else:
+                icon = "🟢"
+                color = "green"
+
+            # メッセージにアイコンを含めない
+            alerts_data.append({
+                "icon": icon,
+                "message": alert.get("title", "アラート"),
+                "id": alert.get("id"),
+                "details": alert.get("message"),
+                "priority": alert.get("priority"),
+                "color": color
+            })
+
+        # アラートがない場合はDB状態を表示
+        if not alerts_data:
+            return [
+                {"icon": "✅", "message": "✅ すべて正常に稼働中 (DBから取得)", "id": None}
+            ]
+
+        return alerts_data
+
+    except Exception as e:
+        # エラー時は接続エラーを表示
+        return [
+            {"icon": "⚠️", "message": f"⚠️ システムエラー: {str(e)}", "id": None}
+        ]
 
 def show_chat_interface():
     """チャットインターフェース"""
@@ -247,61 +296,82 @@ def show_chat_interface():
     if prompt := st.chat_input("配置に関する相談を入力してください..."):
         # ユーザーメッセージを追加
         st.session_state.messages.append({"role": "user", "content": prompt})
-        
+
         with chat_container:
             with st.chat_message("user"):
                 st.markdown(prompt)
-        
-        # AI応答を生成（実際の実装ではAPIを呼び出す）
-        response, suggestion = generate_ai_response(prompt)
-        
+
+        # ローディング表示を強化
+        with chat_container:
+            with st.chat_message("assistant"):
+                # プログレス表示
+                progress_placeholder = st.empty()
+
+                with progress_placeholder:
+                    st.markdown("""
+                    <div style="padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                                border-radius: 10px; color: white; text-align: center;">
+                        <h3>🤖 AI分析中...</h3>
+                        <p>Ollamaで配置最適化を計算しています</p>
+                        <p style="font-size: 0.9em; opacity: 0.8;">
+                            ⏱️ ローカルLLMのため30秒〜1分かかります
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                # AI応答を生成（バックエンドAPIを呼び出す）
+                response, suggestion = generate_ai_response(prompt)
+
+                # ローディング表示をクリア
+                progress_placeholder.empty()
+
         # アシスタントメッセージを追加
         message_data = {"role": "assistant", "content": response}
         if suggestion:
             message_data["suggestion"] = suggestion
-        
+
         st.session_state.messages.append(message_data)
-        
-        with chat_container:
-            with st.chat_message("assistant"):
-                st.markdown(response)
-                if suggestion:
-                    show_suggestion_card(suggestion)
+
+        # 応答を再描画
+        st.rerun()
 
 def generate_ai_response(prompt):
-    """AI応答を生成（モック）"""
-    # 実際の実装では、LLMやRAGを使用
-    
-    # デモ用の応答
-    response = f"""
-了解しました。「{prompt}」について分析します。
+    """AI応答を生成（バックエンドAPIから - 完全API連携）"""
+    try:
+        # バックエンドAPIでAI処理
+        result = api_client.chat_with_ai(message=prompt, detail=False)
 
-📊 **現在の状況分析：**
-- 札幌エントリ1工程: 処理遅延 20分
-- 現在配置: 12名
-- 処理残: 450件
-- 必要処理能力: 550件/時
+        if "error" in result:
+            # エラー表示のみ - モックは使用しない
+            error_msg = result.get("error", "不明なエラー")
+            return f"❌ **バックエンドAPIエラー**\n\n{error_msg}\n\nバックエンドが起動しているか確認してください。", None
 
-🎯 **最適化提案：**
-以下の配置調整を提案します：
-"""
-    
-    suggestion = {
-        "id": "SGT2024-001",
-        "changes": [
-            {"from": "盛岡", "to": "札幌", "process": "エントリ1", "count": 3},
-            {"from": "品川", "to": "札幌", "process": "エントリ1", "count": 2},
-            {"from": "西梅田", "to": "札幌", "process": "エントリ1", "count": 1}
-        ],
-        "impact": {
-            "productivity": "+25%",
-            "delay": "-30分",
-            "quality": "維持"
-        },
-        "reason": "過去の類似ケースでは、この配置により95%の確率で遅延解消"
-    }
-    
-    return response, suggestion
+        # API応答を整形
+        response = result.get("response", "応答を生成できませんでした")
+
+        # 提案があれば整形 (changesが空でない場合のみ)
+        suggestion = None
+        if result.get("suggestion"):
+            sug_data = result["suggestion"]
+            changes = sug_data.get("changes", [])
+
+            # changesが空でない、または明示的な配置転換が必要な場合のみ提案を表示
+            if changes and len(changes) > 0:
+                suggestion = {
+                    "id": sug_data.get("id", "N/A"),
+                    "changes": changes,
+                    "impact": sug_data.get("impact", {}),
+                    "reason": sug_data.get("reason", ""),
+                    "rag_operators": result.get("rag_results", {}).get("recommended_operators", [])
+                }
+
+        return response, suggestion
+
+    except Exception as e:
+        # エラー表示のみ
+        return f"❌ **システムエラー**\n\n{str(e)}\n\nバックエンドとの通信に失敗しました。", None
+
+
 
 def show_suggestion_card(suggestion):
     """提案カードを表示"""
@@ -409,156 +479,45 @@ def show_suggestion_card(suggestion):
         with col1:
             st.markdown(f'<span id="{suggestion["id"]}-approve"></span>', unsafe_allow_html=True)
             if st.button("✅ 承認", key=f"approve_{suggestion['id']}", use_container_width=True):
-                message_placeholder.success("✅ 配置変更を承認しました")
-                send_notification(suggestion)
+                # バックエンドAPIで承認実行
+                result = api_client.execute_approval_action(
+                    approval_id=suggestion['id'],
+                    action="approve",
+                    user="管理者",
+                    user_id="admin001",
+                    reason="チャットから承認",
+                    notes=""
+                )
+
+                if result.get("success"):
+                    message_placeholder.success("✅ 配置変更を承認しました")
+                    send_notification(suggestion)
+                else:
+                    message_placeholder.error(f"❌ 承認に失敗しました: {result.get('error', '不明なエラー')}")
+
         with col2:
             st.markdown(f'<span id="{suggestion["id"]}-reject"></span>', unsafe_allow_html=True)
             if st.button("❌ 却下", key=f"reject_{suggestion['id']}", use_container_width=True):
-                message_placeholder.info("❌ 配置変更を却下しました")
+                # バックエンドAPIで却下実行
+                result = api_client.execute_approval_action(
+                    approval_id=suggestion['id'],
+                    action="reject",
+                    user="管理者",
+                    user_id="admin001",
+                    reason="却下",
+                    notes=""
+                )
+
+                if result.get("success"):
+                    message_placeholder.info("❌ 配置変更を却下しました")
+                else:
+                    message_placeholder.error(f"❌ 却下に失敗しました: {result.get('error', '不明なエラー')}")
+
         with col3:
             st.markdown(f'<span id="{suggestion["id"]}-discuss"></span>', unsafe_allow_html=True)
             if st.button("💬 詳細を相談", key=f"discuss_{suggestion['id']}", use_container_width=True):
                 message_placeholder.info("💬 詳細な相談モードに移行します")
 
-def show_approval_interface():
-    """配置承認インターフェース"""
-    st.markdown("## 承認待ちの配置変更")
-    
-    # メッセージ表示用のプレースホルダー（共通の場所）
-    message_placeholder = st.empty()
-    
-    # 承認待ちリスト（実際の実装ではAPIから取得）
-    pending_approvals = get_pending_approvals()
-    
-    if not pending_approvals:
-        st.info("現在、承認待ちの配置変更はありません")
-        return
-    
-    for approval in pending_approvals:
-        with st.container():
-            # カード風のスタイリング
-            st.markdown(f"""
-            <div style="background: #f0f2f6; padding: 1.5rem; border-radius: 10px; margin-bottom: 1rem;">
-                <h3 style="color: #1a1a2e; margin-bottom: 1rem;">
-                    提案ID: {approval['id']} - {approval['timestamp']}
-                </h3>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            col1, col2 = st.columns([3, 1])
-            
-            with col1:
-                # 配置変更の可視化
-                show_allocation_visualization(approval)
-            
-            with col2:
-                st.markdown("### 📊 影響予測")
-                st.metric("処理能力", f"+{approval['impact']['capacity']}件/時")
-                st.metric("遅延リスク", approval['impact']['delay_risk'], 
-                         delta=f"{approval['impact']['delay_change']}")
-                st.metric("品質スコア", approval['impact']['quality'])
-                
-                st.markdown("---")
-                
-                # 承認ページ用のボタンスタイル
-                st.markdown(f"""
-                <style>
-                #batch-{approval['id']}-approve {{
-                    background-color: #22c55e !important;
-                    color: white !important;
-                }}
-                #batch-{approval['id']}-approve:hover {{
-                    background-color: #16a34a !important;
-                }}
-                #batch-{approval['id']}-reject {{
-                    background-color: #ef4444 !important;
-                    color: white !important;
-                }}
-                #batch-{approval['id']}-reject:hover {{
-                    background-color: #dc2626 !important;
-                }}
-                </style>
-                """, unsafe_allow_html=True)
-                
-                st.markdown(f'<span id="batch-{approval["id"]}-approve"></span>', unsafe_allow_html=True)
-                if st.button("✅ 一括承認",
-                           key=f"batch_approve_{approval['id']}", 
-                           use_container_width=True):
-                    message_placeholder.success(f"✅ 提案 {approval['id']} を承認しました")
-                    send_notification(approval)
-                
-                st.markdown(f'<span id="batch-{approval["id"]}-reject"></span>', unsafe_allow_html=True)
-                if st.button("❌ 却下", key=f"batch_reject_{approval['id']}", 
-                           use_container_width=True):
-                    message_placeholder.info(f"❌ 提案 {approval['id']} を却下しました")
-
-def get_pending_approvals():
-    """承認待ちの配置変更を取得（モック）"""
-    return [
-        {
-            "id": "APV2024-001",
-            "timestamp": "2024-01-15 10:30",
-            "changes": [
-                {"from": "札幌", "to": "盛岡", "process": "エントリ2", "count": 3},
-                {"from": "品川", "to": "札幌", "process": "エントリ1", "count": 2}
-            ],
-            "impact": {
-                "capacity": 230,
-                "delay_risk": "低",
-                "delay_change": "-15%",
-                "quality": "98.5%"
-            },
-            "urgency": "high"
-        }
-    ]
-
-def show_allocation_visualization(approval):
-    """配置変更の可視化"""
-    # 業務別の人員配置をヒートマップで表示
-    locations = ["札幌", "盛岡", "品川", "西梅田", "本町東", "沖縄"]
-    processes = ["エントリ1", "エントリ2", "補正", "SV補正"]
-    
-    # ダミーデータ（実際はAPIから取得）
-    current_data = pd.DataFrame({
-        "札幌": [12, 8, 6, 3],
-        "盛岡": [8, 5, 4, 2],
-        "品川": [15, 10, 8, 4],
-        "西梅田": [10, 8, 5, 3],
-        "本町東": [8, 6, 4, 2],
-        "沖縄": [6, 4, 3, 2]
-    }, index=processes)
-    
-    # ヒートマップ作成
-    fig = go.Figure(data=go.Heatmap(
-        z=current_data.values,
-        x=locations,
-        y=processes,
-        colorscale='Blues',
-        text=current_data.values,
-        texttemplate="%{text}名",
-        textfont={"size": 12},
-        hovertemplate="拠点: %{x}<br>工程: %{y}<br>人数: %{text}名<extra></extra>"
-    ))
-    
-    # 変更箇所をハイライト
-    for change in approval["changes"]:
-        # 実装では変更箇所に矢印やマーカーを追加
-        pass
-    
-    fig.update_layout(
-        title="配置変更の可視化",
-        height=300,
-        xaxis_title="拠点",
-        yaxis_title="工程",
-        font=dict(size=12)
-    )
-    
-    st.plotly_chart(fig, use_container_width=True)
-
-def send_notification(data):
-    """通知を送信（モック）"""
-    # 実際の実装では、WebSocketやAPIを使用して通知を送信
-    st.toast(f"✅ 配置変更が承認されました: {data.get('id', 'N/A')}", icon="✅")
 
 if __name__ == "__main__":
     main()
