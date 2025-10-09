@@ -2,6 +2,22 @@
 
 AI配置最適化システムのフロントエンドアプリケーション (Streamlit)
 
+---
+
+## 📚 ドキュメント
+
+### 🔰 初めての方へ
+- **[完全インストールガイド](INSTALLATION_GUIDE.md)** - フロント・バックエンド・DBの完全セットアップ手順
+- **[デモ動画用台本](DEMO_SCRIPT_FINAL.md)** - デモ実施手順と推奨質問文
+
+### 📖 詳細情報
+- **[プロジェクト詳細](CLAUDE.md)** - システム構成、API一覧、統合状況
+- **[技術要素まとめ](TECHNICAL_SUMMARY.md)** - 技術スタック、性能、構成図
+- **[業務階層構造](BUSINESS_HIERARCHY.md)** - SS/非SS/あはき/適用徴収の4階層
+- **[実データ成功レポート](REAL_DATA_SUCCESS.md)** - 実オペレータ100名での動作確認結果
+
+---
+
 ## 🚀 クイックスタート
 
 ### Docker起動 (推奨)
@@ -80,9 +96,35 @@ aimee-fe/
 - **バックエンド**: `/Users/umemiya/Desktop/erax/aimee-be`
 - **データベース**: `/Users/umemiya/Desktop/erax/aimee-db`
 
-## 📝 詳細情報
+## 📊 システム状態
 
-詳細は `CLAUDE.md` を参照してください。
+### 現在のデータベース
+- **実オペレータ**: 100名 (竹下朱美、高山麻由子、上野由香利など)
+- **スキル情報**: 191件
+- **業務**: SS、非SS、あはき、適用徴収 (4階層対応)
+- **拠点**: 札幌、品川、本町東、西梅田、沖縄、佐世保
+
+### 主な機能
+- ✅ **4階層明示**: 「SS」の「新SS(W)」の「OCR対象」の「エントリ1」形式
+- ✅ **実オペレータ名表示**: 萩野裕子さん、大川千代美さん など
+- ✅ **配置転換提案**: AI信頼度85%
+- ✅ **承認履歴保存**: 別システムから読み取り可能
+
+---
+
+## 🔧 完全セットアップ手順
+
+初めてセットアップする場合は **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** を参照してください。
+
+**主な手順**:
+1. MySQL設定 (ユーザー・データベース作成)
+2. スキーマ適用 (`schema.sql`)
+3. 実データインポート (100名のオペレータ)
+4. バックエンドDocker起動 (Ollama、ChromaDB、Redis)
+5. フロントエンドDocker起動
+6. 動作確認テスト
+
+---
 
 ## 🐛 トラブルシューティング
 
@@ -108,6 +150,44 @@ docker-compose logs -f api
 lsof -i:8501  # フロントエンド
 lsof -i:8002  # バックエンド
 ```
+
+### データが表示されない
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-db
+
+# オペレータ数確認
+python3 -c "
+from config import db_manager
+result = db_manager.execute_query('SELECT COUNT(*) as cnt FROM operators WHERE is_valid = 1')
+print(f'オペレータ: {result[0][\"cnt\"]}名')
+"
+
+# 0名の場合、INSTALLATION_GUIDE.md の実データインポート手順を実行
+```
+
+詳細なトラブルシューティングは **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md#トラブルシューティング)** を参照してください。
+
+---
+
+## 📚 全ドキュメント一覧
+
+### セットアップ関連
+- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - 完全インストール手順
+- **[AWS_DEPLOY_GUIDE.md](AWS_DEPLOY_GUIDE.md)** - AWSデプロイ手順
+
+### 開発・運用関連
+- **[CLAUDE.md](CLAUDE.md)** - プロジェクト詳細、API一覧、統合状況
+- **[TECHNICAL_SUMMARY.md](TECHNICAL_SUMMARY.md)** - 技術スタック、パフォーマンス
+- **[INTEGRATION.md](INTEGRATION.md)** - フロント・バックエンド統合ガイド
+- **[COMPLETE.md](COMPLETE.md)** - 完了作業記録
+
+### デモ・テスト関連
+- **[DEMO_SCRIPT_FINAL.md](DEMO_SCRIPT_FINAL.md)** - デモ動画用台本
+- **[DEMO_QUESTIONS.md](DEMO_QUESTIONS.md)** - デモ用質問文パターン
+- **[REAL_DATA_SUCCESS.md](REAL_DATA_SUCCESS.md)** - 実データテスト結果
+- **[BUSINESS_HIERARCHY.md](BUSINESS_HIERARCHY.md)** - 業務階層構造
+
+---
 
 ## 📄 ライセンス
 
