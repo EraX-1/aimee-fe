@@ -1,5 +1,7 @@
 # AIMEE プロジェクト情報
 
+**最終更新**: 2025-10-17 04:00
+
 ## プロジェクト概要
 
 **プロジェクト名**: AIMEE (AI配置最適化システム)
@@ -9,6 +11,66 @@
 - **aimee-fe** (`/Users/umemiya/Desktop/erax/aimee-fe`): フロントエンド (Streamlit)
 - **aimee-be** (`/Users/umemiya/Desktop/erax/aimee-be`): バックエンド (FastAPI)
 - **aimee-db** (`/Users/umemiya/Desktop/erax/aimee-db`): データベース設定・スクリプト
+
+---
+
+## 🆕 最新の実装状況 (2025-10-17)
+
+### データベース投入済み
+
+**MySQL (aimee_db)**:
+- **progress_snapshots**: 832件 ✅ **重要** - Q1~Q6実装の基盤
+  - 受信時刻 (snapshot_time)
+  - 納期 (expected_completion_time)
+  - 残タスク数 (total_waiting)
+  - 工程別件数 (entry_count, correction_waiting等)
+- operators: 100件 (名前モック化済み)
+- operator_process_capabilities: 191件
+- login_records_by_location: 17件
+- rag_context: 5件 (管理者ノウハウ)
+
+**ChromaDB (aimee_knowledge)**:
+- ポート: 8003 (Docker) / 8001 (ローカルpanasonicと共用)
+- ドキュメント: 12件 (管理者ノウハウのみ)
+- データソース: `/Users/umemiya/Desktop/erax/aimee-fe/管理者の判断材料・判断基準等について.txt`
+- 埋め込みモデル: intfloat/multilingual-e5-small
+
+**投入スクリプト**:
+- `/Users/umemiya/Desktop/erax/aimee-db/extract_and_import_snapshots.py` - progress_snapshots投入
+- `/Users/umemiya/Desktop/erax/aimee-db/import_manager_knowledge_to_chroma.py` - ChromaDB投入
+
+### ハイブリッドRAG実装済み
+
+**構成**: MySQL (構造化データ) + ChromaDB (管理者ノウハウ)
+
+**実装箇所**:
+- `ChromaService.search_manager_rules()`: 管理者ルール検索
+- `IntegratedLLMService`: RAG統合ロジック
+- `OllamaService`: プロンプトに管理者基準を含める
+- `DatabaseService`: 6種類のintent_type対応
+
+**対応するintent_type**:
+1. `deadline_optimization`: 納期ベース最適化
+2. `completion_time_prediction`: 完了時刻予測
+3. `delay_risk_detection`: 遅延リスク検出
+4. `impact_analysis`: 影響分析
+5. `cross_business_transfer`: 業務間移動
+6. `process_optimization`: 工程別最適化
+
+### API精度テスト結果
+
+**総合精度**: 54.2%
+
+| 質問 | 精度 | 状態 |
+|------|------|------|
+| Q1: 納期20分前に完了 | 75% | ✅ |
+| Q2: 移動元への影響 | 50% | ⚠️ |
+| Q3: 業務間移動 | 0% | ❌ |
+| Q4: 完了時刻予測 | 100% | ✅ |
+| Q5: 工程別最適化 | 0% | ❌ |
+| Q6: 遅延リスク検出 | 100% | ✅ |
+
+**テストスクリプト**: `/Users/umemiya/Desktop/erax/aimee-fe/run_api_test.py`
 
 ---
 
@@ -92,9 +154,71 @@ def get_alert_detail(alert_id) -> Dict:
 
 ---
 
-## システム起動方法
+## システム起動方法 (2025-10-17更新)
 
-### 🐳 Docker起動 (推奨)
+### 🚀 現在の推奨起動方法
+
+#### ステップ1: Dockerサービスを起動 (Ollama + ChromaDB)
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-be
+docker-compose up -d ollama-light ollama-main chromadb
+
+# モデルが未ダウンロードの場合
+docker exec aimee-be-ollama-light-1 ollama pull qwen2:0.5b
+docker exec aimee-be-ollama-main-1 ollama pull gemma3:4b
+
+# 確認
+docker ps | grep aimee-be
+# ollama-light (ポート11433), ollama-main (ポート11435), chromadb (ポート8003) が起動
+```
+
+#### ステップ2: バックエンドをローカルで起動
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-be
+python3 start.py
+
+# または直接uvicornで起動
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8002
+
+# APIドキュメント: http://localhost:8002/docs
+```
+
+#### ステップ3: フロントエンドを起動
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-fe/frontend
+streamlit run app.py
+
+# アプリURL: http://localhost:8501
+```
+
+#### ステップ4: データが投入されているか確認
+
+```bash
+# MySQL確認
+cd /Users/umemiya/Desktop/erax/aimee-db
+python3 -c "
+from config import db_manager
+result = db_manager.execute_query('SELECT COUNT(*) as count FROM progress_snapshots')
+print(f'progress_snapshots: {result[0][\"count\"]}件')
+"
+# 期待値: 832件
+
+# ChromaDB確認
+python3 << EOF
+import chromadb
+client = chromadb.HttpClient(host='localhost', port=8003)
+collections = client.list_collections()
+for col in collections:
+    if 'aimee' in col.name.lower():
+        print(f'{col.name}: {col.count()}件')
+EOF
+# 期待値: aimee_knowledge: 12件
+```
+
+### 🐳 旧Docker起動方法 (参考)
 
 #### クイックスタート - 全体起動
 ```bash
@@ -385,3 +509,143 @@ mysql -u aimee_user -p'Aimee2024!' aimee_db -e "SHOW TABLES;"
   - CLAUDE.md作成
   - Docker起動スクリプト作成
   - フロントエンドDocker化完了
+
+---
+
+## 📂 データ再投入方法 (次回起動時)
+
+### progress_snapshotsが空の場合
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-db
+python3 extract_and_import_snapshots.py
+```
+
+### ChromaDBが空の場合 (aimee_knowledgeコレクション)
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-db
+
+# aimee-be用ChromaDB (ポート8003) に投入
+python3 << 'PYEOF'
+import chromadb
+from chromadb.utils import embedding_functions
+
+client = chromadb.HttpClient(host='localhost', port=8003)
+embedding_function = embedding_functions.SentenceTransformerEmbeddingFunction(
+    model_name="intfloat/multilingual-e5-small"
+)
+
+collection = client.get_or_create_collection(
+    name="aimee_knowledge",
+    embedding_function=embedding_function
+)
+
+# 管理者ノウハウを読み込み
+with open('/Users/umemiya/Desktop/erax/aimee-fe/管理者の判断材料・判断基準等について.txt', 'r') as f:
+    content = f.read()
+
+# チャンキングして投入
+sections = [s.strip() for s in content.split('\n\n') if s.strip() and len(s.strip()) > 10]
+collection.add(
+    documents=sections,
+    ids=[f"rule_{i}" for i in range(len(sections))],
+    metadatas=[{"category": "manager_rule", "source": "管理者の判断材料.txt"} for _ in sections]
+)
+
+print(f"✅ {len(sections)}件投入完了")
+PYEOF
+```
+
+---
+
+## 📚 重要なドキュメント
+
+### 作業ログ・レポート
+
+- **[IMPLEMENTATION_LOG.md](./IMPLEMENTATION_LOG.md)** - 全作業ログ (2025-10-17)
+  - データ投入手順
+  - ハイブリッドRAG実装過程
+  - APIテスト結果 (4回分)
+  - 精度改善の履歴
+
+- **[CURRENT_DATABASE_STATUS.md](../aimee-db/CURRENT_DATABASE_STATUS.md)** - 最新DB状況
+  - 全20テーブルの詳細情報
+  - データソース一覧
+  - 投入済み/未投入の状態
+  - ChromaDBの状況
+
+- **[reports/](./reports/)** - バグ報告と新要件分析
+  - バグ報告 (4件)
+  - 新要件分析 (Q1~Q6)
+  - 実装可能性レポート
+
+### テスト関連
+
+- **[run_api_test.py](./run_api_test.py)** - APIテストスクリプト
+- **[test_cases_q1_q6.json](./test_cases_q1_q6.json)** - テストケース定義
+- **[api_test_results.json](./api_test_results.json)** - 最新テスト結果
+
+---
+
+## ⚠️ 既知の問題
+
+### バグ (reports/bug_reports/BUG_REPORT.md)
+
+1. 複数人提案が1人しか表示されない (優先度: 高)
+2. 承認/否認ボタンエラー (優先度: 最優先)
+3. 配置提案ロジックが不適切 (優先度: 最優先)
+4. 会話履歴未対応 (優先度: 高)
+
+### API精度の課題
+
+- Q3 (業務間移動): 0% - ロジック未実装
+- Q5 (工程別最適化): 0% - ロジック未実装
+- Q2 (影響分析): 50% - 会話履歴が必要
+
+---
+
+## 🔧 トラブルシューティング
+
+### ChromaDBに接続できない
+
+```bash
+# Dockerコンテナを確認
+docker ps | grep chroma
+
+# aimee-be用ChromaDB (ポート8003) が起動しているか確認
+curl http://localhost:8003/api/v1/heartbeat
+
+# 起動していない場合
+cd /Users/umemiya/Desktop/erax/aimee-be
+docker-compose up -d chromadb
+```
+
+### Ollamaが応答しない
+
+```bash
+# Ollamaコンテナを確認
+docker ps | grep ollama
+
+# モデルリストを確認
+docker exec aimee-be-ollama-main-1 ollama list
+
+# モデルが未ダウンロードの場合
+docker exec aimee-be-ollama-main-1 ollama pull gemma3:4b
+```
+
+### progress_snapshotsが空
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-db
+python3 extract_and_import_snapshots.py
+```
+
+### APIが「現在のリソースで対応可能です」しか返さない
+
+1. progress_snapshotsが投入されているか確認
+2. Ollamaが起動しているか確認
+3. ChromaDBにaimee_knowledgeコレクションがあるか確認
+
+---
+

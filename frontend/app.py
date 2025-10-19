@@ -149,7 +149,7 @@ def main():
     # ヘッダー部分
     col1, col2 = st.columns([3, 1])
     with col1:
-        st.markdown("# 🤖 AIMEE - AI配置最適化システム")
+        st.markdown("# 配置調整システム")
     with col2:
         st.markdown(f"**{datetime.now().strftime('%Y-%m-%d %H:%M')}**")
     
@@ -308,16 +308,7 @@ def show_chat_interface():
                 progress_placeholder = st.empty()
 
                 with progress_placeholder:
-                    st.markdown("""
-                    <div style="padding: 1rem; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-                                border-radius: 10px; color: white; text-align: center;">
-                        <h3>🤖 AI分析中...</h3>
-                        <p>Ollamaで配置最適化を計算しています</p>
-                        <p style="font-size: 0.9em; opacity: 0.8;">
-                            ⏱️ ローカルLLMのため30秒〜1分かかります
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
+                    st.info("分析中...")
 
                 # AI応答を生成（バックエンドAPIを呼び出す）
                 response, suggestion = generate_ai_response(prompt)
