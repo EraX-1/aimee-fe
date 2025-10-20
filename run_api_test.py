@@ -14,8 +14,10 @@ with open('test_cases_q1_q6.json', 'r', encoding='utf-8') as f:
     test_cases = data['test_cases']
 
 results = []
+session_id = "test_session_" + time.strftime("%Y%m%d_%H%M%S")
 
 print("=== AIMEE APIテスト開始 ===\n")
+print(f"セッションID: {session_id}\n")
 
 for test in test_cases:
     print(f"\n{'='*60}")
@@ -29,7 +31,7 @@ for test in test_cases:
             json={
                 "message": test['question'],
                 "context": {},
-                "detail": False
+                "session_id": session_id
             },
             timeout=120
         )
