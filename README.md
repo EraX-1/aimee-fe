@@ -51,9 +51,18 @@ streamlit run app.py
 
 ## 📍 アクセスURL
 
+### ローカル開発環境
 - **フロントエンド**: http://localhost:8501
 - **バックエンドAPI**: http://localhost:8002/docs
 - **DB接続**: MySQL localhost:3306 (user: aimee_user, pass: Aimee2024!)
+
+### 🌐 本番環境（AWS）
+- **フロントエンド**: http://43.207.175.35:8501
+- **バックエンドAPI**: http://54.150.242.233:8002
+- **APIドキュメント**: http://54.150.242.233:8002/docs
+- **データベース**: AWS RDS MySQL
+
+**デプロイ手順**: 詳細は **[AWS_DEPLOY_GUIDE.md](AWS_DEPLOY_GUIDE.md)** を参照してください。
 
 ## 📁 プロジェクト構成
 
@@ -172,10 +181,11 @@ print(f'オペレータ: {result[0][\"cnt\"]}名')
 ## 📚 全ドキュメント一覧
 
 ### セットアップ関連
-- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - 完全インストール手順
-- **[AWS_DEPLOY_GUIDE.md](AWS_DEPLOY_GUIDE.md)** - AWSデプロイ手順
+- **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - 完全インストール手順（ローカル開発環境）
+- **[AWS_DEPLOY_GUIDE.md](AWS_DEPLOY_GUIDE.md)** - AWS本番環境デプロイ手順 ⭐️
 
 ### 開発・運用関連
+- **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解（Mermaid図付き）⭐️
 - **[CLAUDE.md](CLAUDE.md)** - プロジェクト詳細、API一覧、統合状況
 - **[TECHNICAL_SUMMARY.md](TECHNICAL_SUMMARY.md)** - 技術スタック、パフォーマンス
 - **[INTEGRATION.md](INTEGRATION.md)** - フロント・バックエンド統合ガイド
