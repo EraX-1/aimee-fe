@@ -11,104 +11,79 @@
 この図は、ユーザーが「札幌のエントリ1工程が遅延しています」と入力した場合の処理の流れを示しています。
 
 ```mermaid
-graph TB
-    %% ユーザー入力
-    User["👤 ユーザー<br/><br/>「札幌のエントリ1工程が<br/>遅延しています」"]
+flowchart TD
+    %% ======== レイヤー1: ユーザー ========
+    User["👤 ユーザー<br/>「札幌のエントリ1工程が遅延しています」"]
 
-    %% フロントエンド層
-    subgraph Frontend["フロントエンド層"]
-        direction TB
-        FrontendInfo["EC2: 43.207.175.35<br/>ポート: 8501"]
-        StreamlitUI["Streamlit UI<br/><br/>・チャット画面<br/>・提案カード表示<br/>・承認/却下ボタン"]
-        APIClient["API Client<br/><br/>・HTTP POST<br/>・JSON変換<br/>・エラーハンドリング"]
-        FrontendInfo -.-> StreamlitUI
-        FrontendInfo -.-> APIClient
-    end
+    %% ======== レイヤー2: フロントエンド ========
+    StreamlitUI["Streamlit UI<br/>EC2: 43.207.175.35:8501<br/><br/>・チャット画面<br/>・提案カード表示"]
 
-    %% バックエンド層
-    subgraph Backend["バックエンド層"]
-        direction TB
-        BackendInfo["EC2: 54.150.242.233<br/>ポート: 8002"]
-        FastAPI["FastAPI<br/><br/>・非同期処理<br/>・ルーティング<br/>・CORS対応"]
+    %% ======== レイヤー3: API Client ========
+    APIClient["API Client<br/><br/>・HTTP POST<br/>・JSON変換"]
 
-        %% ステップ1: 意図解析
-        Step1["STEP 1: 意図解析<br/>0.5秒<br/><br/>入力: メッセージ<br/>出力: intent_type"]
+    %% ======== レイヤー4: FastAPI ========
+    FastAPI["FastAPI<br/>EC2: 54.150.242.233:8002<br/><br/>・非同期処理<br/>・ルーティング"]
 
-        %% ステップ2: RAG検索
-        Step2["STEP 2: RAG検索<br/>0.3秒<br/><br/>入力: メッセージ<br/>出力: 管理者ノウハウ3件"]
+    %% ======== レイヤー5: STEP 1 ========
+    Step1["STEP 1: 意図解析 - 0.5秒<br/>入力: メッセージ<br/>出力: intent_type"]
+    OllamaLight["Ollama Light qwen2:0.5b<br/>ポート: 11433"]
 
-        %% ステップ3: DB照会
-        Step3["STEP 3: DB照会<br/>0.8秒<br/><br/>入力: intent + entities<br/>出力: 進捗/オペレータ情報"]
+    %% ======== レイヤー6: STEP 2 ========
+    Step2["STEP 2: RAG検索 - 0.3秒<br/>入力: メッセージ<br/>出力: 管理者ノウハウ3件"]
+    ChromaDB["ChromaDB ポート: 8003<br/>・管理者ノウハウ: 12件<br/>・ベクトル検索"]
 
-        %% ステップ4: 提案生成
-        Step4["STEP 4: 提案生成<br/>0.2秒<br/><br/>入力: DB Data + RAG<br/>出力: 配置変更案"]
+    %% ======== レイヤー7: STEP 3 ========
+    Step3["STEP 3: DB照会 - 0.8秒<br/>入力: intent + entities<br/>出力: 進捗/オペレータ情報"]
+    MySQL["MySQL RDS<br/>・progress_snapshots: 832件<br/>・operators: 100名"]
 
-        %% ステップ5: 応答生成
-        Step5["STEP 5: 応答生成<br/>2.5秒<br/><br/>入力: All Context<br/>出力: 日本語応答"]
+    %% ======== レイヤー8: STEP 4 ========
+    Step4["STEP 4: 提案生成 - 0.2秒<br/>入力: DB Data + RAG<br/>出力: 配置変更案"]
 
-        BackendInfo -.-> FastAPI
-    end
+    %% ======== レイヤー9: STEP 5 ========
+    Step5["STEP 5: 応答生成 - 2.5秒<br/>入力: All Context<br/>出力: 日本語応答"]
+    OllamaMain["Ollama Main gemma3:4b<br/>ポート: 11435"]
 
-    %% AI層
-    subgraph AI["AI/LLM層"]
-        direction TB
-        OllamaLight["Ollama Light<br/>qwen2:0.5b<br/>ポート: 11433<br/><br/>用途: 意図解析<br/>速度: 超高速<br/>メモリ: 1GB"]
+    %% ======== レイヤー10: 応答 ========
+    Response["📤 応答<br/>response: 日本語応答文<br/>suggestion: 配置変更案<br/>impact: 効果予測"]
 
-        OllamaMain["Ollama Main<br/>gemma3:4b<br/>ポート: 11435<br/><br/>用途: 応答生成<br/>速度: 高品質<br/>メモリ: 8GB"]
-    end
-
-    %% データ層
-    subgraph Data["データ層"]
-        direction TB
-        ChromaDB["ChromaDB<br/>ポート: 8003<br/><br/>・管理者ノウハウ: 12件<br/>・ベクトル検索<br/>・埋め込みモデル:<br/>multilingual-e5-small"]
-
-        MySQL["MySQL RDS<br/><br/>・progress_snapshots: 832件<br/>・operators: 100名<br/>・capabilities: 191件<br/>・approval_history"]
-
-        Redis["Redis Cache<br/>ポート: 6380<br/><br/>・会話履歴<br/>・提案リスト<br/>・TTL: 1時間"]
-    end
-
-    %% 応答データ
-    Response["📤 応答<br/><br/>response:<br/>「札幌のエントリ1工程について<br/>納期まで残り20分で120件の<br/>タスクが残っています..」<br/><br/>suggestion:<br/>・品川→札幌: 1名<br/>・盛岡→札幌: 2名<br/><br/>impact:<br/>・生産性: +25%<br/>・遅延: -30分"]
-
-    %% フロー接続
-    User -->|メッセージ入力| StreamlitUI
+    %% ======== 垂直フロー（上から下へ） ========
+    User --> StreamlitUI
     StreamlitUI --> APIClient
-    APIClient -->|POST /api/v1/chat/message| FastAPI
+    APIClient --> FastAPI
+    FastAPI --> Step1
 
-    FastAPI -->|process_message| Step1
-    Step1 -->|analyze_intent| OllamaLight
-    OllamaLight -->|intent_type:<br/>deadline_optimization<br/>location: 札幌<br/>process: エントリ1| Step1
+    %% STEP 1の処理
+    Step1 --> OllamaLight
+    OllamaLight --> Step2
 
-    Step1 --> Step2
-    Step2 -->|search_manager_rules| ChromaDB
-    ChromaDB -->|1. 納期20分前は3名移動<br/>2. エントリ工程は経験重視<br/>3. 遅延時は近隣拠点から| Step2
+    %% STEP 2の処理
+    Step2 --> ChromaDB
+    ChromaDB --> Step3
 
-    Step2 --> Step3
-    Step3 -->|fetch_data_by_intent| MySQL
-    MySQL -->|納期: 16:00<br/>残タスク: 120件<br/>現在: 15:40<br/>必要速度: 6件/分<br/>現在速度: 5件/分| Step3
+    %% STEP 3の処理
+    Step3 --> MySQL
+    MySQL --> Step4
 
-    Step3 --> Step4
-    Step4 -->|ロジック計算:<br/>不足人数 = 3名<br/>候補選定:<br/>スキルレベル順| Step4
-
+    %% STEP 4の処理
     Step4 --> Step5
-    Step5 -->|generate_response| OllamaMain
-    OllamaMain -->|プロンプト:<br/>状況+管理者基準+提案<br/>↓<br/>日本語応答生成| Step5
 
-    Step5 -->|統合| Response
+    %% STEP 5の処理
+    Step5 --> OllamaMain
+    OllamaMain --> Response
+
+    %% 応答の返却
     Response --> FastAPI
-    FastAPI -->|JSON| APIClient
+    FastAPI --> APIClient
     APIClient --> StreamlitUI
-    StreamlitUI -->|提案カード表示| User
+    StreamlitUI --> User
 
-    FastAPI -.->|キャッシュ| Redis
-
-    %% スタイル
+    %% スタイル定義
     classDef userStyle fill:#e3f2fd,stroke:#1976d2,stroke-width:3px
     classDef frontendStyle fill:#fff3e0,stroke:#f57c00,stroke-width:2px
     classDef backendStyle fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef stepStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
     classDef aiStyle fill:#e8f5e9,stroke:#388e3c,stroke-width:2px
     classDef dataStyle fill:#fce4ec,stroke:#c2185b,stroke-width:2px
-    classDef stepStyle fill:#fff9c4,stroke:#f9a825,stroke-width:2px
     classDef responseStyle fill:#e0f7fa,stroke:#0097a7,stroke-width:3px
 
     class User userStyle
@@ -116,7 +91,7 @@ graph TB
     class FastAPI backendStyle
     class Step1,Step2,Step3,Step4,Step5 stepStyle
     class OllamaLight,OllamaMain aiStyle
-    class ChromaDB,MySQL,Redis dataStyle
+    class ChromaDB,MySQL dataStyle
     class Response responseStyle
 ```
 
