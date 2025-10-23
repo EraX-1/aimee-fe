@@ -16,43 +16,53 @@ graph TB
     User["👤 ユーザー<br/><br/>「札幌のエントリ1工程が<br/>遅延しています」"]
 
     %% フロントエンド層
-    subgraph Frontend["🖥️ フロントエンド (EC2: 43.207.175.35:8501)"]
+    subgraph Frontend["フロントエンド層"]
+        direction TB
+        FrontendInfo["EC2: 43.207.175.35<br/>ポート: 8501"]
         StreamlitUI["Streamlit UI<br/><br/>・チャット画面<br/>・提案カード表示<br/>・承認/却下ボタン"]
         APIClient["API Client<br/><br/>・HTTP POST<br/>・JSON変換<br/>・エラーハンドリング"]
+        FrontendInfo -.-> StreamlitUI
+        FrontendInfo -.-> APIClient
     end
 
     %% バックエンド層
-    subgraph Backend["⚙️ バックエンド (EC2: 54.150.242.233:8002)"]
+    subgraph Backend["バックエンド層"]
+        direction TB
+        BackendInfo["EC2: 54.150.242.233<br/>ポート: 8002"]
         FastAPI["FastAPI<br/><br/>・非同期処理<br/>・ルーティング<br/>・CORS対応"]
 
         %% ステップ1: 意図解析
-        Step1["📌 STEP 1<br/>意図解析<br/>(0.5秒)<br/><br/>入力: メッセージ<br/>出力: intent_type"]
+        Step1["STEP 1: 意図解析<br/>0.5秒<br/><br/>入力: メッセージ<br/>出力: intent_type"]
 
         %% ステップ2: RAG検索
-        Step2["📌 STEP 2<br/>RAG検索<br/>(0.3秒)<br/><br/>入力: メッセージ<br/>出力: 管理者ノウハウ3件"]
+        Step2["STEP 2: RAG検索<br/>0.3秒<br/><br/>入力: メッセージ<br/>出力: 管理者ノウハウ3件"]
 
         %% ステップ3: DB照会
-        Step3["📌 STEP 3<br/>DB照会<br/>(0.8秒)<br/><br/>入力: intent + entities<br/>出力: 進捗/オペレータ情報"]
+        Step3["STEP 3: DB照会<br/>0.8秒<br/><br/>入力: intent + entities<br/>出力: 進捗/オペレータ情報"]
 
         %% ステップ4: 提案生成
-        Step4["📌 STEP 4<br/>提案生成<br/>(0.2秒)<br/><br/>入力: DB Data + RAG<br/>出力: 配置変更案"]
+        Step4["STEP 4: 提案生成<br/>0.2秒<br/><br/>入力: DB Data + RAG<br/>出力: 配置変更案"]
 
         %% ステップ5: 応答生成
-        Step5["📌 STEP 5<br/>応答生成<br/>(2.5秒)<br/><br/>入力: All Context<br/>出力: 日本語応答"]
+        Step5["STEP 5: 応答生成<br/>2.5秒<br/><br/>入力: All Context<br/>出力: 日本語応答"]
+
+        BackendInfo -.-> FastAPI
     end
 
     %% AI層
-    subgraph AI["🤖 AI/LLM層"]
+    subgraph AI["AI/LLM層"]
+        direction TB
         OllamaLight["Ollama Light<br/>qwen2:0.5b<br/>ポート: 11433<br/><br/>用途: 意図解析<br/>速度: 超高速<br/>メモリ: 1GB"]
 
         OllamaMain["Ollama Main<br/>gemma3:4b<br/>ポート: 11435<br/><br/>用途: 応答生成<br/>速度: 高品質<br/>メモリ: 8GB"]
     end
 
     %% データ層
-    subgraph Data["💾 データ層"]
+    subgraph Data["データ層"]
+        direction TB
         ChromaDB["ChromaDB<br/>ポート: 8003<br/><br/>・管理者ノウハウ: 12件<br/>・ベクトル検索<br/>・埋め込みモデル:<br/>multilingual-e5-small"]
 
-        MySQL["MySQL (RDS)<br/><br/>・progress_snapshots: 832件<br/>・operators: 100名<br/>・capabilities: 191件<br/>・approval_history"]
+        MySQL["MySQL RDS<br/><br/>・progress_snapshots: 832件<br/>・operators: 100名<br/>・capabilities: 191件<br/>・approval_history"]
 
         Redis["Redis Cache<br/>ポート: 6380<br/><br/>・会話履歴<br/>・提案リスト<br/>・TTL: 1時間"]
     end
