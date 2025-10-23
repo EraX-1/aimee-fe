@@ -6,6 +6,9 @@ AI配置最適化システムのフロントエンドアプリケーション (S
 
 ## 📚 ドキュメント
 
+### 🎯 システム全体像
+- **[システム全体図（Mermaid）](SYSTEM_OVERVIEW.md)** - 一目でわかる全体構成と処理フロー ⭐️⭐️
+
 ### 🔰 初めての方へ
 - **[完全インストールガイド](INSTALLATION_GUIDE.md)** - フロント・バックエンド・DBの完全セットアップ手順
 - **[デモ動画用台本](DEMO_SCRIPT_FINAL.md)** - デモ実施手順と推奨質問文
@@ -185,7 +188,8 @@ print(f'オペレータ: {result[0][\"cnt\"]}名')
 - **[AWS_DEPLOY_GUIDE.md](AWS_DEPLOY_GUIDE.md)** - AWS本番環境デプロイ手順 ⭐️
 
 ### 開発・運用関連
-- **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解（Mermaid図付き）⭐️
+- **[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)** - システム全体図（一目でわかるMermaid図）⭐️⭐️
+- **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解（技術詳細）⭐️
 - **[CLAUDE.md](CLAUDE.md)** - プロジェクト詳細、API一覧、統合状況
 - **[TECHNICAL_SUMMARY.md](TECHNICAL_SUMMARY.md)** - 技術スタック、パフォーマンス
 - **[INTEGRATION.md](INTEGRATION.md)** - フロント・バックエンド統合ガイド
