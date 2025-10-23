@@ -190,6 +190,7 @@ print(f'オペレータ: {result[0][\"cnt\"]}名')
 ### 開発・運用関連
 - **[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)** - システム全体図（一目でわかるMermaid図）⭐️⭐️
 - **[SYSTEM_ARCHITECTURE.md](SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解（技術詳細）⭐️
+- **[IMPLEMENTATION_STATUS.md](IMPLEMENTATION_STATUS.md)** - 課題と実装状況まとめ ⭐️
 - **[CLAUDE.md](CLAUDE.md)** - プロジェクト詳細、API一覧、統合状況
 - **[TECHNICAL_SUMMARY.md](TECHNICAL_SUMMARY.md)** - 技術スタック、パフォーマンス
 - **[INTEGRATION.md](INTEGRATION.md)** - フロント・バックエンド統合ガイド

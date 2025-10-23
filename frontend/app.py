@@ -397,6 +397,14 @@ def show_suggestion_card(suggestion):
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
+
+                # オペレータ名を表示（operators配列がある場合）
+                operators = change.get('operators', [])
+                if operators and len(operators) > 0:
+                    st.markdown("**👥 対象オペレータ:**")
+                    for operator in operators:
+                        st.markdown(f"• {operator}")
+                    st.markdown("")  # 空行
         
         with col2:
             st.markdown("### 📈 予測される効果")
