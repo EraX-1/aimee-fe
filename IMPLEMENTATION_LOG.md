@@ -1143,3 +1143,424 @@ class ConversationStore:
 
 **作業完了**: 2025-10-20 04:20
 
+---
+
+### 2025-10-24 02:00 - スキルベースマッチング実装
+
+**タスク**: 異なる工程間移動の実現（エントリ2 → エントリ1）
+
+#### 背景
+
+ユーザーからの要求：
+> 拠点間の同一工程移動は意味がない（エントリ1 → エントリ1）
+> どの業務のどの工程から、どの業務のどの工程へ移動するかを提案してほしい
+> 例：「SS（W）」の「OCR対象」の「エントリ1」へ、「非SS（W)」の「OCR対象」の「エントリ2」から5人移動
+
+#### 問題点
+
+**修正前の動作**:
+```
+❌ エントリ1 → エントリ1 の同じ工程間移動（意味がない）
+❌ 拠点間移動として表示（品川 → 札幌）
+```
+
+**根本原因**:
+- 同じ工程名でマッチング（`if resource.process_name == shortage.process_name`）
+- 異なる工程間の移動ができない
+- スキル互換性を考慮していない
+
+#### 実装内容
+
+**1. DatabaseService拡張** (`database_service.py:241-285`)
+
+新規クエリ追加: `operators_by_target_skill`
+```sql
+-- 不足工程のスキルを持つオペレータの現在配置を取得
+SELECT
+    o.operator_name,
+    p_target.process_name as target_process_name,  -- 移動先スキル
+    p_current.process_name as current_process_name, -- 現在の配置
+    b_target.business_category,
+    ...
+FROM operators o
+JOIN operator_process_capabilities opc_target ON o.operator_id = opc_target.operator_id
+LEFT JOIN operator_process_capabilities opc_current ON o.operator_id = opc_current.operator_id
+WHERE p_target.process_name IN ('エントリ1', 'エントリ2', '補正', 'SV補正', '目検')
+  AND opc_target.work_level >= 1
+```
+
+**結果**: 429件のスキル保有データを取得
+- エントリ1のスキル保有者99名
+- その中で現在エントリ2に配置中の人を特定可能
+
+**2. IntegratedLLMService改修** (`integrated_llm_service.py:295-376`)
+
+マッチングロジックを完全刷新:
+```python
+# 旧ロジック（削除）
+for resource in available_resources:
+    if resource.process_name == shortage.process_name:  # 同じ工程
+        # マッチング
+
+# 新ロジック（スキルベース）
+skill_holders = operators_by_target_skill.get(shortage_process, [])
+for op in skill_holders:
+    if op.current_process != shortage_process:  # 異なる工程
+        # 移動候補に追加
+```
+
+業務間移動の優先順位付け:
+```python
+sorted_groups = sorted(
+    from_process_groups.items(),
+    key=lambda x: (
+        0 if x[0][0] != shortage_category else 1,  # 業務間優先
+        -len(x[1])  # 人数が多い順
+    )
+)
+```
+
+**3. Pydanticスキーマ変更** (`app/schemas/responses/chat.py`)
+
+AllocationChangeを4階層構造に変更:
+```python
+class AllocationChange(BaseModel):
+    # 新構造
+    from_business_category: str  # SS/非SS/あはき/適用徴収
+    from_business_name: str      # 新SS(W)等
+    from_process_category: str   # OCR対象等
+    from_process_name: str       # エントリ1等
+    to_business_category: str
+    to_business_name: str
+    to_process_category: str
+    to_process_name: str
+    count: int
+    operators: Optional[List[str]]
+    is_cross_business: Optional[bool]
+
+    # 旧フィールド（後方互換性）
+    from_location: Optional[str] = None
+    to_location: Optional[str] = None
+    process: Optional[str] = None
+```
+
+**4. OllamaService修正** (`ollama_service.py:367-393`)
+
+応答サマリーを4階層形式に変更:
+```python
+def _create_suggestion_summary(self, suggestion):
+    from_info = f"「{from_category}」の「{from_business}」の「{from_ocr}」の「{from_process}」"
+    to_info = f"「{to_category}」の「{to_business}」の「{to_ocr}」の「{to_process}」"
+    summary = f"{from_info}から{ops_str}を{to_info}へ{count}人移動"
+```
+
+影響分析も4階層対応:
+```python
+def _generate_impact_analysis_response(...):
+    from_info = f"「{from_category}」の「{from_business}」の「{from_ocr}」の「{from_process}」"
+    to_info = f"「{to_category}」の「{to_business}」の「{to_ocr}」の「{to_process}」"
+```
+
+**5. 拠点フィルタリング修正** (`integrated_llm_service.py:277`)
+
+「拠点名」という文字列でフィルタリングされる問題を修正:
+```python
+if user_specified_location and user_specified_location not in ["不明", "拠点名", None]:
+    # フィルタリング
+else:
+    # 全拠点を対象
+```
+
+#### テスト結果
+
+**総合精度**: 100% (維持) 🎉
+
+**Q1の応答例**（修正後）:
+```
+- 「SS」の「新SS(W)」の「OCR非対象」の「エントリ2」から
+  稲實　百合子さんを「OCR非対象」の「エントリ1」へ1人移動
+
+- 「SS」の「新SS(W)」の「OCR非対象」の「エントリ2」から
+  萩野　裕子さんを「OCR対象」の「エントリ1」へ1人移動
+
+- 「SS」の「新SS(W)」の「OCR非対象」の「エントリ2」から
+  櫻井　由希恵さんを「OCR対象」の「エントリ1」へ1人移動
+```
+
+**Q2の応答例**（修正後）:
+```
+【移動元: 「SS」の「新SS(W)」の「OCR非対象」の「エントリ2」】
+- 移動人数: 1人 (稲實　百合子さん)
+- 移動先: 「SS」の「新SS(W)」の「OCR非対象」の「エントリ1」
+- 影響予測: 1人移動後も処理継続可能と推定
+```
+
+**評価ポイント**:
+```
+✅ 異なる工程間移動: エントリ2 → エントリ1
+✅ 4階層のみの表記（拠点名なし）
+✅ スキル保有を確認済み（品質保証）
+✅ 実名表示（稲實　百合子さん等）
+✅ 業務間移動の優先順位付け
+✅ 全質問100%維持
+```
+
+#### 成果
+
+**スキルベースマッチングアルゴリズム完成**:
+1. 不足工程のスキルを持つオペレータを全検索
+2. 現在の配置工程を確認
+3. 異なる工程に配置中なら移動候補とする
+4. 業務間移動を優先
+5. 4階層のみで表記
+
+**実装効果**:
+- 従来: 同じ工程間の移動のみ（制限あり）
+- 新実装: 異なる工程間の移動が可能（柔軟性向上）
+- スキル互換性を保証
+- 品質を維持しながら人員配置の柔軟性を最大化
+
+#### 変更ファイル
+
+1. `/Users/umemiya/Desktop/erax/aimee-be/app/services/database_service.py`
+   - 行241-285: スキルベースマッチングクエリ追加
+
+2. `/Users/umemiya/Desktop/erax/aimee-be/app/services/integrated_llm_service.py`
+   - 行295-376: マッチングロジック完全刷新
+   - 行277: 拠点フィルタリング修正
+
+3. `/Users/umemiya/Desktop/erax/aimee-be/app/schemas/responses/chat.py`
+   - 行6-26: AllocationChangeを4階層構造に変更
+
+4. `/Users/umemiya/Desktop/erax/aimee-be/app/services/ollama_service.py`
+   - 行367-393: サマリー生成を4階層対応
+   - 行683-696: 影響分析を4階層対応
+
+5. `/Users/umemiya/Desktop/erax/aimee-fe/SYSTEM_OVERVIEW.md`
+   - STEP 4の説明を大幅更新
+   - スキルベースマッチングの詳細追加
+   - Mermaid図更新
+   - 実装の成果セクション追加
+
+6. `/Users/umemiya/Desktop/erax/aimee-fe/CLAUDE.md`
+   - 更新履歴追加
+   - リンク修正（documentsフォルダ対応）
+
+7. `/Users/umemiya/Desktop/erax/aimee-fe/README.md`
+   - 最新の実装状況を反映
+   - スキルベースマッチングの説明追加
+
+#### ドキュメント整理
+
+**作成**:
+- `documents/` フォルダ作成
+- `documents/README.md` 作成
+
+**移動**:
+- 14個のmdファイルをdocuments/へ移動
+- reportsフォルダをdocuments/へ移動
+- 過去のテストログをdocuments/へ移動
+
+**トップレベルに残したドキュメント**:
+- README.md（最新情報）
+- CLAUDE.md（プロジェクト詳細）
+- SYSTEM_OVERVIEW.md（システム全体図）
+- INSTALLATION_GUIDE.md（セットアップ）
+- DEMO_SCRIPT_FINAL.md（デモ）
+- IMPLEMENTATION_LOG.md（作業ログ）
+
+#### 作業時間
+
+約1.5時間
+
+---
+
+**🎉🎉 スキルベースマッチング実装完了: 異なる工程間移動を実現**
+
+**作業完了**: 2025-10-24 02:10
+
+---
+
+### 2025-10-26 21:00 - 承認・否認機能のDB保存対応
+
+**タスク**: 承認/否認ボタンを押した際のDB登録修正
+
+#### 背景
+
+**報告されていたバグ**:
+> 承認または否認ボタンをクリックするとエラーが発生し、DBにデータが保存されない
+
+**原因**:
+1. `approvals.py:253-267`でDB保存処理がコメントアウトされていた
+2. Pydantic v2では`.dict()`が`.model_dump()`に変更されているが未対応
+3. `PendingApproval`オブジェクトに`reason`と`confidence_score`属性がない
+
+#### 実装内容
+
+**1. DB保存処理のコメント解除** (`approvals.py:250-292`)
+
+修正前:
+```python
+# TODO: DB保存は今後実装
+# try:
+#     await save_approval_history(...)
+```
+
+修正後:
+```python
+try:
+    # Pydantic v2対応
+    changes_list = []
+    for c in approval.changes:
+        if hasattr(c, 'model_dump'):
+            changes_list.append(c.model_dump())
+        ...
+
+    await save_approval_history(
+        db=db,
+        suggestion_id=approval_id,
+        changes=changes_list,
+        ...
+    )
+```
+
+**2. Pydantic v2対応**
+
+- `.dict()`と`.model_dump()`の両方に対応
+- `hasattr()`でメソッドの存在確認
+- 後方互換性を維持
+
+**3. 欠損属性の処理**
+
+```python
+# reasonとconfidence_scoreはPendingApprovalにないため、デフォルト値を使用
+reason = getattr(approval, 'reason', "AI提案による配置変更")
+confidence_score = getattr(approval, 'confidence_score', 0.85)
+```
+
+**4. action_timestamp追加** (`approvals.py:53`)
+
+```sql
+INSERT INTO approval_history (
+    ...
+    action_timestamp,
+    ...
+) VALUES (..., NOW(), ...)
+```
+
+#### テスト結果
+
+**承認テスト**:
+```
+提案ID: SGT20251026-210200
+アクション: approved
+実行者: 管理者テスト
+実行日時: 2025-10-26 21:02:27
+理由: 納期対応のため承認
+移動: エントリ2 → エントリ1
+オペレータ: 米田　文さん
+ステータス: pending
+
+✅ DB登録成功
+```
+
+**否認テスト**:
+```
+提案ID: SGT20251026-210304
+アクション: rejected
+実行者: 管理者テスト
+実行日時: 2025-10-26 21:03:21
+理由: 移動元の人員が不足しているため却下
+変更件数: 3件
+
+✅ DB登録成功
+```
+
+**DB最終状態**:
+```
+合計: 4件
+  承認: 2件
+  却下: 2件
+```
+
+#### 保存されるデータ
+
+approval_historyテーブルに以下の情報が保存される：
+
+1. **提案情報**
+   - suggestion_id: 提案ID
+   - changes: 配置変更内容（JSON、4階層構造）
+   - impact: 予測効果（JSON）
+   - reason: AI提案理由
+   - confidence_score: AI信頼度
+
+2. **アクション情報**
+   - action_type: approved/rejected
+   - action_user: 実行者名
+   - action_user_id: 実行者ID
+   - action_timestamp: 実行日時
+   - feedback_reason: 承認/却下理由
+   - feedback_notes: 補足コメント
+
+3. **実行状態**
+   - execution_status: pending/executing/completed/failed
+
+#### RAG学習への活用
+
+**保存されたデータの用途**:
+1. 承認された提案パターンの学習
+2. 却下された提案の回避
+3. 管理者の判断基準の抽出
+4. 信頼度スコアの改善
+
+**将来の実装候補**:
+```python
+# 承認履歴からRAGコンテキストを生成
+approved_patterns = db.query(approval_history).filter(action_type='approved')
+for pattern in approved_patterns:
+    # ChromaDBに追加
+    chroma_collection.add(
+        documents=[pattern.feedback_reason],
+        metadatas=[{"type": "approved_case", "confidence": pattern.confidence_score}]
+    )
+```
+
+#### 成果
+
+✅ 承認・否認ボタンが正常に動作
+✅ DBへの保存が完全に機能
+✅ 承認/否認理由を記録可能
+✅ RAG学習の基盤が整った
+✅ 4階層構造のchangesをJSON形式で保存
+
+#### 変更ファイル
+
+1. `/Users/umemiya/Desktop/erax/aimee-be/app/api/v1/endpoints/approvals.py`
+   - 行250-292: DB保存処理のコメント解除、Pydantic v2対応
+   - 行53: action_timestamp追加
+   - 行273-274: デフォルト値設定（reason, confidence_score）
+
+2. `/Users/umemiya/Desktop/erax/aimee-fe/QUICK_REFERENCE.md` (新規作成)
+   - 全ての最新情報を1ページで網羅
+
+3. `/Users/umemiya/Desktop/erax/aimee-db/DATABASE_STATUS.md` (新規作成)
+   - データベース状況詳細
+   - 本番データとモックデータの区別
+
+4. `/Users/umemiya/Desktop/erax/aimee-fe/CLAUDE.md`
+   - 更新履歴追加
+   - 既知の問題を更新
+
+5. `/Users/umemiya/Desktop/erax/aimee-db/.gitignore`
+   - 本番データファイルを除外設定
+
+#### 作業時間
+
+約30分
+
+---
+
+**🎉 承認・否認機能完全実装: DB保存対応完了、RAG学習準備完了**
+
+**作業完了**: 2025-10-26 21:05
+

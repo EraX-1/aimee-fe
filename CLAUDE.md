@@ -204,9 +204,23 @@ def get_alert_detail(alert_id) -> Dict:
 
 ---
 
-## システム起動方法 (2025-10-17更新)
+## システム起動方法
 
-### 🚀 現在の推奨起動方法
+### 🌐 AWS本番環境デプロイ（2025-10-24更新）⭐️
+
+#### ワンコマンドデプロイ
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-fe
+./deploy-to-aws.sh
+```
+
+**所要時間**: 約15分
+
+**詳細**: [DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md) を参照
+
+---
+
+### 🚀 ローカル開発環境の起動方法
 
 #### ステップ1: Dockerサービスを起動 (Ollama + ChromaDB)
 
@@ -390,11 +404,19 @@ for row in result:
 
 ## データベース情報
 
-### 接続情報
+### ローカル環境
 - **DB名**: `aimee_db`
 - **ユーザー**: `aimee_user`
 - **パスワード**: `Aimee2024!`
 - **ホスト**: `localhost:3306`
+- **データ**: モック名（100名）
+
+### AWS本番環境（RDS）
+- **DB名**: `aimee_db`
+- **ユーザー**: `admin`
+- **パスワード**: `Aimee2024!RDS`
+- **エンドポイント**: `aimee-db.c96uew4c8z02.ap-northeast-1.rds.amazonaws.com:3306`
+- **データ**: モック名（100名） ※実名データは未投入
 
 ### 主要テーブル
 - `locations`: 拠点マスタ
@@ -444,11 +466,12 @@ self.base_url = base_url or os.getenv("AIMEE_API_URL", "http://localhost:8002")
 
 ### ✅ 完全実装済み（コア機能）
 - ✅ APIエンドポイント統一 (8002ポート)
-- ✅ 承認履歴DB保存機能
+- ✅ **承認・否認機能のDB保存** (approval_history完全対応)
 - ✅ 承認/却下のフロント・バック連携
 - ✅ api_client.pyメソッド拡張
 - ✅ **ハイブリッドRAG実装** (MySQL + ChromaDB)
 - ✅ **6種類のintent_type対応** (Q1~Q6)
+- ✅ **スキルベースマッチング** (異なる工程間移動)
 - ✅ **業務間移動優先ロジック** (拠点→業務)
 - ✅ **会話履歴管理** (ConversationStore)
 - ✅ **4階層明示対応** (全配置提案)
@@ -555,6 +578,14 @@ mysql -u aimee_user -p'Aimee2024!' aimee_db -e "SHOW TABLES;"
 
 ## 更新履歴
 
+- **2025-10-26**: 承認・否認機能のDB保存対応完了 🎉
+  - approval_history への完全対応
+  - Pydantic v2対応（model_dump）
+  - 承認・否認ボタンのDB登録成功
+  - RAG学習準備完了（承認/否認履歴の蓄積）
+  - テスト実施（承認2件、否認2件確認）
+  - マスタードキュメント更新（QUICK_REFERENCE.md作成）
+
 - **2025-10-24 (v2)**: スキルベースマッチング実装完了 🎉🎉
   - **異なる工程間移動を実現**（エントリ2 → エントリ1）
   - スキルベースマッチングアルゴリズム実装
@@ -562,6 +593,9 @@ mysql -u aimee_user -p'Aimee2024!' aimee_db -e "SHOW TABLES;"
   - Pydanticスキーマ更新（AllocationChange）
   - 全質問100%維持（新ロジックで再テスト成功）
   - SYSTEM_OVERVIEW.md大幅更新
+  - deploy-to-aws.sh作成（ワンコマンドデプロイ）
+  - ドキュメント整理（documentsフォルダ）
+  - DATABASE_STATUS.md作成
 
 - **2025-10-24 (v1)**: CLAUDE.md最新版更新
   - 最新の実装状況を反映（100%達成）
@@ -639,14 +673,22 @@ PYEOF
 
 ## 📚 重要なドキュメント
 
+### 🔥 最重要
+- **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** ⭐️⭐️⭐️⭐️ - **全ての最新情報を1ページで**
+  - DB環境（ローカル/AWS RDS）
+  - AI/LLMモデル（qwen2、gemma2、ChromaDB）
+  - デプロイ方法（ワンコマンド）
+  - 起動方法、API情報、セキュリティ
+  - トラブルシューティング
+
 ### 📊 システム全体像
-- **[SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md)** - 一目でわかるシステム全体図（Mermaid）⭐️⭐️
+- **[SYSTEM_OVERVIEW.md](./SYSTEM_OVERVIEW.md)** - 一目でわかるシステム全体図（Mermaid）⭐️⭐️⭐️
   - 処理フロー図（5ステップ）
   - ハイブリッドRAGの仕組み
   - 提案生成ロジックの詳細
   - 処理時間の内訳
 
-- **[SYSTEM_ARCHITECTURE.md](./SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解 ⭐️
+- **[SYSTEM_ARCHITECTURE.md](./documents/SYSTEM_ARCHITECTURE.md)** - システムアーキテクチャ詳解
   - 技術スタック詳細
   - 各技術の選定理由
   - データフローの詳細
@@ -661,13 +703,14 @@ PYEOF
   - 業務間移動優先の実装詳細
   - 会話履歴対応の実装詳細
 
-- **[CURRENT_DATABASE_STATUS.md](../aimee-db/CURRENT_DATABASE_STATUS.md)** - 最新DB状況
+- **[DATABASE_STATUS.md](../aimee-db/DATABASE_STATUS.md)** ⭐️ - データベース状況（2025-10-24最新版）
+  - 本番データ vs モックデータの区別
   - 全20テーブルの詳細情報
   - データソース一覧
-  - 投入済み/未投入の状態
+  - セキュリティポリシー
   - ChromaDBの状況
 
-- **[reports/](./reports/)** - バグ報告と新要件分析
+- **[reports/](./documents/reports/)** - バグ報告と新要件分析
   - バグ報告 (4件) - 2件修正済み
   - 新要件分析 (Q1~Q6) - 全問100%達成
   - 実装可能性レポート
@@ -675,33 +718,39 @@ PYEOF
 ### テスト関連
 
 - **[run_api_test.py](./run_api_test.py)** - APIテストスクリプト（Q1~Q6）
-- **[test_q1_q2_conversation.py](./test_q1_q2_conversation.py)** - 会話履歴テスト
 - **[api_test_results.json](./api_test_results.json)** - 最新テスト結果（100%達成）
+- **[documents/test_q1_q2_conversation.py](./documents/test_q1_q2_conversation.py)** - 会話履歴テスト
+- **[documents/test_cases_q1_q6.json](./documents/test_cases_q1_q6.json)** - テストケース定義
+- **[documents/api_test_*.log](./documents/)** - 過去のテストログ
 
 ### セットアップ・デプロイ
 
 - **[INSTALLATION_GUIDE.md](./INSTALLATION_GUIDE.md)** - ローカル開発環境のセットアップ
-- **[AWS_DEPLOY_GUIDE.md](./AWS_DEPLOY_GUIDE.md)** - AWS本番環境へのデプロイ手順 ⭐️
+- **[DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md)** ⭐️ - AWS本番環境デプロイ手順（ワンコマンド）
+- **[deploy-to-aws.sh](./deploy-to-aws.sh)** - 自動デプロイスクリプト
+- **[documents/AWS_DEPLOY_GUIDE.md](./documents/AWS_DEPLOY_GUIDE.md)** - AWS詳細デプロイ手順
 
-### デモ・テスト
+### デモ
 
 - **[DEMO_SCRIPT_FINAL.md](./DEMO_SCRIPT_FINAL.md)** - デモ実施手順
-- **[REAL_DATA_SUCCESS.md](./REAL_DATA_SUCCESS.md)** - 実データでのテスト結果
+- **[documents/REAL_DATA_SUCCESS.md](./documents/REAL_DATA_SUCCESS.md)** - 実データでのテスト結果
+- **[documents/DEMO_VIDEO_SCRIPT.md](./documents/DEMO_VIDEO_SCRIPT.md)** - デモ動画用台本
+- **[documents/DEMO_QUESTIONS.md](./documents/DEMO_QUESTIONS.md)** - デモ用質問パターン
 
 ---
 
 ## ⚠️ 既知の問題
 
-### バグ (reports/bug_reports/BUG_REPORT.md)
+### バグ (documents/reports/bug_reports/BUG_REPORT.md)
 
-**修正済み (2025-10-20)**:
-- ~~配置提案ロジックが不適切~~ → ✅ 業務間移動優先に修正済み
+**修正済み (2025-10-24/10-26)**:
+- ~~配置提案ロジックが不適切~~ → ✅ スキルベースマッチング実装済み
 - ~~会話履歴未対応~~ → ✅ ConversationStore実装済み
 - ~~Q3/Q5ロジック未実装~~ → ✅ 全問100%達成
+- ~~承認/否認ボタンのDB保存~~ → ✅ approval_history完全対応（2025-10-26）
 
 **残課題**:
-1. 複数人提案の表示改善 (優先度: 中) - フロントエンドUI改善
-2. 承認/否認ボタンのDB保存 (優先度: 中) - 現在コメントアウト中
+1. 複数人提案の表示改善 (優先度: 低) - フロントエンドUI改善
 
 ### API精度
 
