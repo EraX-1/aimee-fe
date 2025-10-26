@@ -9,7 +9,7 @@ import time
 API_URL = "http://localhost:8002/api/v1/chat/message"
 
 # テストケースを読み込み
-with open('test_cases_q1_q6.json', 'r', encoding='utf-8') as f:
+with open('documents/test_cases_q1_q6.json', 'r', encoding='utf-8') as f:
     data = json.load(f)
     test_cases = data['test_cases']
 

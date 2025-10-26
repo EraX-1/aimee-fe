@@ -674,6 +674,11 @@ PYEOF
 ## 📚 重要なドキュメント
 
 ### 🔥 最重要
+- **[00_INDEX.md](./00_INDEX.md)** ⭐️⭐️⭐️⭐️⭐️ - **プロジェクト完全索引**
+  - 全ドキュメント・スクリプトへのリンク
+  - 用途別検索ガイド
+  - クイックコマンド集
+
 - **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** ⭐️⭐️⭐️⭐️ - **全ての最新情報を1ページで**
   - DB環境（ローカル/AWS RDS）
   - AI/LLMモデル（qwen2、gemma2、ChromaDB）
