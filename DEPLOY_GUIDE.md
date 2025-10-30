@@ -6,6 +6,18 @@
 
 ## 🚀 クイックデプロイ
 
+### 初回のみ: 改行コード修正
+
+```bash
+cd /Users/umemiya/Desktop/erax/aimee-fe
+sed -i '' 's/\r$//' deploy-to-aws.sh
+chmod +x deploy-to-aws.sh
+```
+
+**注意**: Windowsで編集した場合に必要
+
+---
+
 ### 全体デプロイ（フロントエンド + バックエンド）
 
 ```bash
@@ -14,6 +26,13 @@ cd /Users/umemiya/Desktop/erax/aimee-fe
 ```
 
 **所要時間**: 約10-15分
+
+**自動実行される処理**:
+- SSH接続確認
+- アーカイブ作成・転送
+- docker-compose.yml更新（platform: amd64）
+- コンテナビルド・起動
+- 動作確認テスト
 
 ---
 
