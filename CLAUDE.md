@@ -1,6 +1,7 @@
-# AIMEE プロジェクト情報
+# AIMEE プロジェクト情報（AI用コンテキスト）
 
-**最終更新**: 2025-10-26
+**最終更新**: 2025-11-01
+**バージョン**: 2.0.0
 
 ## ⚠️ プロジェクトルール（重要）
 
@@ -13,19 +14,17 @@
 - 追記が必要な場合は、既存ドキュメントの該当セクションに追記
 
 **マスタードキュメント（上書き対象）**:
-1. **[README.md](README.md)** - プロジェクト概要、最新機能
-2. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - 全情報（DB、モデル、API等）
-3. **[CLAUDE.md](CLAUDE.md)** - このファイル（プロジェクト詳細）
-4. **[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)** - システム全体図
-5. **[IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)** - 実装作業ログ
-6. **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - セットアップ手順
-7. **[DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)** - デプロイ手順
-8. **[DEMO_SCRIPT_FINAL.md](DEMO_SCRIPT_FINAL.md)** - デモスクリプト
-9. **[00_INDEX.md](00_INDEX.md)** - プロジェクト索引
+1. **[README.md](README.md)** - プロジェクト概要、クイックスタート
+2. **[CLAUDE.md](CLAUDE.md)** - このファイル（AI用コンテキスト）
+3. **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - システムアーキテクチャ、技術解説
+4. **[INTENT_TYPES.md](docs/INTENT_TYPES.md)** - 9分類の詳細、内部ロジック
+5. **[DATABASE_SETUP.md](docs/DATABASE_SETUP.md)** - DBセットアップ、データ投入方法
+6. **[LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md)** - ローカル起動方法
+7. **[AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md)** - AWSデプロイ方法
 
 **例外**: 以下の場合のみ新規ドキュメント作成を許可
-- バグ報告書（documents/reports/bug_reports/）
-- 新機能の要件分析（documents/reports/requirement_analysis/）
+- 重要なバグ報告書（docs/に追加）
+- 新機能の要件分析（docs/に追加）
 
 ---
 
@@ -62,7 +61,7 @@
 - [パフォーマンス]
 - [ドキュメント]
 
-**参照**: [CHANGELOG.md](CHANGELOG.md)
+**参照**: [CHANGELOG.md](docs/CHANGELOG.md)
 
 ---
 
@@ -354,52 +353,66 @@ cd /Users/umemiya/Desktop/erax/aimee-fe
 
 **所要時間**: 約15分
 
-**詳細**: [DEPLOY_GUIDE.md](./DEPLOY_GUIDE.md) を参照
+**詳細**: [AWS_DEPLOYMENT.md](docs/AWS_DEPLOYMENT.md) を参照
 
 ---
 
-### 🚀 ローカル開発環境の起動方法
+### 🚀 ローカル開発環境の起動方法（⭐推奨: Docker起動スクリプト）
 
-#### ステップ1: Dockerサービスを起動 (Ollama + ChromaDB)
+#### 方法1: Docker起動スクリプト使用（推奨）
 
 ```bash
+cd /Users/umemiya/Desktop/erax/aimee-fe
+
+# 全体起動（バックエンド + フロントエンド）
+./docker-start-all.sh
+
+# または個別起動
+./docker-start-backend.sh   # バックエンドのみ
+./docker-start-frontend.sh  # フロントエンドのみ
+
+# 状態確認
+./docker-check-status.sh
+
+# 停止
+./docker-stop-all.sh
+
+# ブラウザアクセス
+open http://localhost:8501
+```
+
+**メリット**:
+- ✅ 全依存サービスが自動的に起動
+- ✅ 本番環境と同じ構成
+- ✅ 環境構築が簡単
+
+#### 方法2: Python直接実行（開発・デバッグ用）
+
+コード修正を即座に反映したい場合:
+
+```bash
+# 1. 依存サービスのみDockerで起動
 cd /Users/umemiya/Desktop/erax/aimee-be
-docker-compose up -d ollama-light ollama-main chromadb
+docker-compose up -d ollama-main chromadb redis
 
-# モデルが未ダウンロードの場合
-docker exec aimee-be-ollama-light-1 ollama pull qwen2:0.5b
-docker exec aimee-be-ollama-main-1 ollama pull gemma3:4b
+# 2. バックエンド起動（ホットリロード有効）
+cd /Users/umemiya/Desktop/erax/aimee-fe
+./scripts/start_backend.sh
 
-# 確認
-docker ps | grep aimee-be
-# ollama-light (ポート11433), ollama-main (ポート11435), chromadb (ポート8003) が起動
+# 3. フロントエンド起動（別ターミナル）
+./scripts/start_frontend.sh
+
+# ブラウザアクセス
+open http://localhost:8501
 ```
 
-#### ステップ2: バックエンドをローカルで起動
+**メリット**:
+- ✅ コード変更が即座に反映（--reload）
+- ✅ デバッグが容易
+
+#### データ投入確認
 
 ```bash
-cd /Users/umemiya/Desktop/erax/aimee-be
-python3 start.py
-
-# または直接uvicornで起動
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 8002
-
-# APIドキュメント: http://localhost:8002/docs
-```
-
-#### ステップ3: フロントエンドを起動
-
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-fe/frontend
-streamlit run app.py
-
-# アプリURL: http://localhost:8501
-```
-
-#### ステップ4: データが投入されているか確認
-
-```bash
-# MySQL確認
 cd /Users/umemiya/Desktop/erax/aimee-db
 python3 -c "
 from config import db_manager
@@ -408,74 +421,11 @@ print(f'progress_snapshots: {result[0][\"count\"]}件')
 "
 # 期待値: 832件
 
-# ChromaDB確認
-python3 << EOF
-import chromadb
-client = chromadb.HttpClient(host='localhost', port=8003)
-collections = client.list_collections()
-for col in collections:
-    if 'aimee' in col.name.lower():
-        print(f'{col.name}: {col.count()}件')
-EOF
-# 期待値: aimee_knowledge: 12件
+# データが不足している場合
+./restore_dummy_data.sh
 ```
 
-### 🐳 旧Docker起動方法 (参考)
-
-#### クイックスタート - 全体起動
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-fe
-./docker-start-all.sh
-```
-
-#### 個別起動
-```bash
-# バックエンドのみ
-cd /Users/umemiya/Desktop/erax/aimee-fe
-./docker-start-backend.sh
-
-# フロントエンドのみ
-cd /Users/umemiya/Desktop/erax/aimee-fe
-./docker-start-frontend.sh
-```
-
-#### 状態確認
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-fe
-./docker-check-status.sh
-```
-
-#### 停止
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-fe
-./docker-stop-all.sh
-```
-
-**重要**: バックエンドのDockerはポート8002で起動します (ChromaDBとポート共有に注意)
-
-### 🐍 ローカル起動 (開発用)
-
-#### バックエンド起動 (ポート 8002)
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-be
-python3 start.py
-```
-
-または:
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-be
-python3 -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
-```
-
-**APIドキュメント**: http://localhost:8002/docs
-
-#### フロントエンド起動
-```bash
-cd /Users/umemiya/Desktop/erax/aimee-fe/frontend
-streamlit run app.py
-```
-
-**アプリURL**: http://localhost:8501
+**詳細**: [LOCAL_DEVELOPMENT.md](docs/LOCAL_DEVELOPMENT.md)
 
 ### DB接続確認
 ```bash
@@ -694,8 +644,8 @@ mysql -u aimee_user -p'Aimee2024!' aimee_db -e "SHOW TABLES;"
   - `mysql`: MySQL 8.0 (ポート3306)
   - `redis`: Redis 7 (ポート6380)
   - `chromadb`: ベクトルDB (ポート8002 - APIと共有)
-  - `ollama-light`: 軽量LLM (qwen2:0.5b) (ポート11433)
-  - `ollama-main`: メインLLM (gemma3:4b) (ポート11435)
+  - `ollama-light`: 意図解析LLM (gemma2:2b) (ポート11435)
+  - `ollama-main`: 応答生成LLM (gemma3:4b) (ポート11435)
 
 ### フロントエンド (aimee-fe)
 - **Dockerfile**: `Dockerfile`
