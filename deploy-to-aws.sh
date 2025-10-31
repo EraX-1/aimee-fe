@@ -7,6 +7,10 @@
 #   ./deploy-to-aws.sh          # 全体デプロイ
 #   ./deploy-to-aws.sh frontend # フロントエンドのみ
 #   ./deploy-to-aws.sh backend  # バックエンドのみ
+#
+# 注意: 初回実行前に改行コードを修正:
+#   sed -i '' 's/\r$//' deploy-to-aws.sh
+#   chmod +x deploy-to-aws.sh
 #########################################
 
 set -e

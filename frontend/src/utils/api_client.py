@@ -77,14 +77,15 @@ class AIMEEAPIClient:
         except Exception as e:
             return {"error": str(e)}
 
-    def chat_with_ai(self, message: str, context: Dict[str, Any] = None, detail: bool = False) -> Dict[str, Any]:
+    def chat_with_ai(self, message: str, context: Dict[str, Any] = None, session_id: str = None, debug: bool = False) -> Dict[str, Any]:
         """
         統合LLMとチャット
 
         Args:
             message: ユーザーメッセージ
             context: コンテキスト情報
-            detail: デバッグ情報を含めるか
+            session_id: セッションID（会話履歴用）
+            debug: デバッグ情報を含めるか
 
         Returns:
             AI応答
@@ -93,7 +94,8 @@ class AIMEEAPIClient:
         payload = {
             "message": message,
             "context": context or {},
-            "detail": detail
+            "session_id": session_id or "default",
+            "debug": debug
         }
 
         try:

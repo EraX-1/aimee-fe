@@ -1564,3 +1564,156 @@ for pattern in approved_patterns:
 
 **作業完了**: 2025-10-26 21:05
 
+---
+
+### 2025-10-26 22:15 - ファイル整理・マスタードキュメント再構築
+
+**タスク**: プロジェクト全体のファイル整理とドキュメント再構築
+
+#### 背景
+
+**ユーザーからの要求**:
+> ファイルやドキュメントが増えすぎて整理したい
+> 不要・deprecated なファイルを全て削除
+> マスタードキュメントを作り直したい
+> AWSデプロイ、Dockerシステム、アプリケーションはデグレしないように
+
+#### 実施内容
+
+**1. 全ファイル分析**
+
+AI Agentを使用して100以上のファイルを分析：
+- 更新日時確認
+- 内容分析
+- 用途特定
+- 削除候補の自動抽出
+
+**2. 削除ファイル（26件、約198KB削減）**
+
+| カテゴリ | 削除件数 | 理由 |
+|---------|---------|------|
+| ログファイル | 14件 | api_test_*.log（最新はapi_test_results.jsonに統合） |
+| 重複・古いドキュメント | 8件 | AWS_COMPLETE_GUIDE.md等（最新版に統合済み） |
+| 重複スクリプト | 1件 | stop_all.sh（docker-stop-all.shで代替） |
+| 古いテストスクリプト | 2件 | test_q1_q2_conversation.py等 |
+| 不要ファイル | 1件 | frontend/package.json（Node.js未使用） |
+
+**削除したファイル詳細**:
+```
+ログファイル（14件）:
+- documents/api_test_output.log
+- documents/api_test_output_round2.log
+- documents/api_test_final.log
+- documents/api_test_q3_q5_output.log
+- documents/api_test_q3_q5_round2.log
+- documents/api_test_4layer_output.log
+- documents/api_test_conversation_output.log
+- documents/api_test_q2_conversation.log
+- documents/api_test_final_output.log
+- documents/api_test_final_with_conversation.log
+- documents/api_test_business_priority.log
+- documents/api_test_business_transfer.log
+- documents/api_test_complete_final.log
+- frontend/streamlit.log
+
+重複・古いドキュメント（8件）:
+- documents/AWS_COMPLETE_GUIDE.md
+- documents/AWS_DEPLOY_GUIDE.md
+- documents/SYSTEM_ARCHITECTURE.md
+- documents/IMPLEMENTATION_STATUS_GOOGLE_DOCS.md
+- documents/COMPLETE.md
+- documents/INTEGRATION.md
+- documents/TECHNICAL_SUMMARY.md
+- documents/USAGE_GUIDE.md
+
+その他（4件）:
+- stop_all.sh
+- documents/test_q1_q2_conversation.py
+- documents/api_test_q1_q6.sh
+- frontend/package.json
+```
+
+**3. マスタードキュメント再構築**
+
+**新規作成**:
+- **00_INDEX.md**: プロジェクト完全索引
+  - 全ドキュメント・スクリプトへのリンク
+  - 用途別検索ガイド
+  - ディレクトリ構造
+  - クイックコマンド集
+
+**更新**:
+- README.md: 00_INDEX.mdへのリンク追加
+- CLAUDE.md: 00_INDEX.mdを最重要ドキュメントに追加
+- run_api_test.py: test_cases_q1_q6.jsonのパス修正（documents/配下）
+
+**4. 保護したファイル**
+
+以下のファイルは保護（削除せず）：
+- マスタードキュメント（9個）
+- 実行中スクリプト（11個）
+- フロントエンドコア（frontend/app.py等）
+- テスト・設定ファイル（run_api_test.py、requirements.txt等）
+- 要件定義・DB設計（01_requirements/、02_database/等）
+
+#### デグレ防止テスト結果
+
+**APIテスト**:
+```
+総合精度: 95.8%
+- Q1: 75%  （エントリ2 → エントリ1提案）
+- Q2: 100% （影響分析）
+- Q3: 100% （業務間移動）
+- Q4: 100% （完了時刻予測）
+- Q5: 100% （工程別配置）
+- Q6: 100% （遅延リスク検出）
+```
+
+**機能テスト**:
+- ✅ デモ質問: 正常動作
+- ✅ シンプル質問: 正常動作
+- ✅ Dockerスクリプト: 正常動作
+- ✅ 承認・否認機能: DB保存成功
+
+**結論**: デグレなし
+
+#### 最終ドキュメント構成
+
+**ルートディレクトリ（9個のマスタードキュメント）**:
+1. **00_INDEX.md** - プロジェクト完全索引（新規）
+2. **README.md** - プロジェクト概要
+3. **QUICK_REFERENCE.md** - クイックリファレンス
+4. **CLAUDE.md** - Claude向けマスター
+5. **SYSTEM_OVERVIEW.md** - システム全体図
+6. **IMPLEMENTATION_LOG.md** - 実装ログ
+7. **INSTALLATION_GUIDE.md** - セットアップガイド
+8. **DEPLOY_GUIDE.md** - デプロイガイド
+9. **DEMO_SCRIPT_FINAL.md** - デモスクリプト
+
+**documentsフォルダ（アーカイブ・詳細資料）**:
+- 7個のドキュメント
+- reportsフォルダ（バグ報告、要件分析）
+
+#### 成果
+
+✅ ファイル数を26件削減
+✅ 重複・古いドキュメント整理
+✅ マスタードキュメント体系化
+✅ 00_INDEX.md作成（プロジェクト索引）
+✅ デグレなし（全機能正常動作）
+✅ ディスク容量約198KB削減
+
+#### バックアップ
+
+`/Users/umemiya/Desktop/erax/aimee-fe-backup-before-cleanup.tar.gz` (1.5MB)
+
+#### 作業時間
+
+約45分
+
+---
+
+**🎉 ファイル整理完了: プロジェクト構成の最適化完了**
+
+**作業完了**: 2025-10-26 22:30
+

@@ -259,6 +259,19 @@ def get_alerts():
 def show_chat_interface():
     """チャットインターフェース"""
     
+    # URLクエリパラメータからデバッグモード取得
+    query_params = st.query_params
+    debug_mode = query_params.get("debug") == "1"
+
+    # session_stateにデバッグモード保存
+    if "debug_mode" not in st.session_state:
+        st.session_state.debug_mode = debug_mode
+
+    # セッションIDの初期化
+    if "session_id" not in st.session_state:
+        import uuid
+        st.session_state.session_id = f"session_{uuid.uuid4().hex[:12]}"
+
     # チャット履歴の初期化
     if "messages" not in st.session_state:
         st.session_state.messages = [
@@ -287,10 +300,14 @@ def show_chat_interface():
         for message in st.session_state.messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
-                
+
                 # アシスタントのメッセージに提案が含まれる場合
                 if message["role"] == "assistant" and "suggestion" in message:
                     show_suggestion_card(message["suggestion"])
+
+                # デバッグ情報表示（デバッグモードON時のみ）
+                if message["role"] == "assistant" and "debug_info" in message and message["debug_info"]:
+                    show_debug_info(message["debug_info"])
     
     # チャット入力
     if prompt := st.chat_input("配置に関する相談を入力してください..."):
@@ -311,7 +328,7 @@ def show_chat_interface():
                     st.info("分析中...")
 
                 # AI応答を生成（バックエンドAPIを呼び出す）
-                response, suggestion = generate_ai_response(prompt)
+                response, suggestion, debug_info = generate_ai_response(prompt)
 
                 # ローディング表示をクリア
                 progress_placeholder.empty()
@@ -320,6 +337,8 @@ def show_chat_interface():
         message_data = {"role": "assistant", "content": response}
         if suggestion:
             message_data["suggestion"] = suggestion
+        if debug_info:
+            message_data["debug_info"] = debug_info
 
         st.session_state.messages.append(message_data)
 
@@ -329,13 +348,20 @@ def show_chat_interface():
 def generate_ai_response(prompt):
     """AI応答を生成（バックエンドAPIから - 完全API連携）"""
     try:
+        # セッションIDを取得
+        session_id = st.session_state.get("session_id", "default")
+
         # バックエンドAPIでAI処理
-        result = api_client.chat_with_ai(message=prompt, detail=False)
+        result = api_client.chat_with_ai(
+            message=prompt,
+            session_id=session_id,
+            debug=st.session_state.get("debug_mode", False)
+        )
 
         if "error" in result:
             # エラー表示のみ - モックは使用しない
             error_msg = result.get("error", "不明なエラー")
-            return f"❌ **バックエンドAPIエラー**\n\n{error_msg}\n\nバックエンドが起動しているか確認してください。", None
+            return f"❌ **バックエンドAPIエラー**\n\n{error_msg}\n\nバックエンドが起動しているか確認してください。", None, None
 
         # API応答を整形
         response = result.get("response", "応答を生成できませんでした")
@@ -356,166 +382,254 @@ def generate_ai_response(prompt):
                     "rag_operators": result.get("rag_results", {}).get("recommended_operators", [])
                 }
 
-        return response, suggestion
+        # デバッグ情報を取得
+        debug_info = result.get("debug_info") if st.session_state.get("debug_mode", False) else None
+
+        return response, suggestion, debug_info
 
     except Exception as e:
         # エラー表示のみ
-        return f"❌ **システムエラー**\n\n{str(e)}\n\nバックエンドとの通信に失敗しました。", None
+        return f"❌ **システムエラー**\n\n{str(e)}\n\nバックエンドとの通信に失敗しました。", None, None
 
 
 
 def show_suggestion_card(suggestion):
-    """提案カードを表示"""
-    with st.expander("📋 配置調整提案の詳細", expanded=True):
-        # メッセージ表示用のプレースホルダー
-        message_placeholder = st.empty()
-        
-        col1, col2 = st.columns([2, 1])
-        
-        with col1:
-            st.markdown("### 🔄 配置変更内容")
-            for i, change in enumerate(suggestion["changes"]):
+    """提案カードを表示（各提案ごとに個別のexpanderと承認ボタン）"""
+
+    # 全体サマリー
+    total_people = sum(c.get('count', 0) for c in suggestion['changes'])
+    total_changes = len(suggestion['changes'])
+
+    st.markdown(f"""
+    <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 1rem; border-radius: 8px; margin-bottom: 1rem;">
+        <h3 style="margin: 0; color: white;">📋 配置調整提案</h3>
+        <p style="margin: 0.5rem 0 0 0; font-size: 1.1rem;">合計 {total_changes}件の提案（移動人数: {total_people}人）</p>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # 各提案ごとに個別のexpanderを作成
+    for i, change in enumerate(suggestion["changes"], 1):
+        # 4階層情報を取得
+        from_cat = change.get('from_business_category', 'N/A')
+        from_biz = change.get('from_business_name', 'N/A')
+        from_ocr = change.get('from_process_category', '')
+        from_proc = change.get('from_process_name', 'N/A')
+
+        to_cat = change.get('to_business_category', 'N/A')
+        to_biz = change.get('to_business_name', 'N/A')
+        to_ocr = change.get('to_process_category', '')
+        to_proc = change.get('to_process_name', 'N/A')
+
+        # 4階層表示文字列を作成
+        from_text = f"{from_cat} > {from_biz}"
+        if from_ocr:
+            from_text += f" > {from_ocr}"
+        from_text += f" > {from_proc}"
+
+        to_text = f"{to_cat} > {to_biz}"
+        if to_ocr:
+            to_text += f" > {to_ocr}"
+        to_text += f" > {to_proc}"
+
+        count = change.get('count', 0)
+        operators = change.get('operators', [])
+
+        # 提案タイトル
+        expander_title = f"提案{i}: {from_cat} → {to_cat} ({from_proc}, {count}人)"
+
+        # 各提案ごとにexpander作成
+        with st.expander(expander_title, expanded=(i == 1)):  # 最初だけ展開
+            col1, col2 = st.columns([2, 1])
+
+            with col1:
+                st.markdown("#### 🔄 配置変更内容")
+
                 # 配置変更を視覚的にわかりやすく表示
                 st.markdown(f"""
                 <div style="background: linear-gradient(to right, #f3f4f6, #e5e7eb); padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
                     <div style="display: flex; align-items: center; justify-content: space-between;">
                         <div style="flex: 1;">
-                            <span style="font-size: 1.1rem; font-weight: 600; color: #374151;">{change['from']}</span>
-                            <br>
-                            <span style="font-size: 0.9rem; color: #6b7280;">{change['process']}</span>
+                            <span style="font-size: 0.85rem; font-weight: 600; color: #374151;">{from_text}</span>
                         </div>
-                        <div style="flex: 0.5; text-align: center;">
+                        <div style="flex: 0.3; text-align: center;">
                             <span style="font-size: 1.5rem; color: #3b82f6;">→</span>
                             <br>
-                            <span style="font-size: 2.2rem; font-weight: 700; color: #ef4444;">{change['count']}名</span>
+                            <span style="font-size: 1.8rem; font-weight: 700; color: #ef4444;">{count}名</span>
                         </div>
                         <div style="flex: 1; text-align: right;">
-                            <span style="font-size: 1.1rem; font-weight: 600; color: #374151;">{change['to']}</span>
-                            <br>
-                            <span style="font-size: 0.9rem; color: #6b7280;">{change['process']}</span>
+                            <span style="font-size: 0.85rem; font-weight: 600; color: #374151;">{to_text}</span>
                         </div>
                     </div>
                 </div>
                 """, unsafe_allow_html=True)
 
-                # オペレータ名を表示（operators配列がある場合）
-                operators = change.get('operators', [])
+                # オペレータ名を表示
                 if operators and len(operators) > 0:
                     st.markdown("**👥 対象オペレータ:**")
                     for operator in operators:
                         st.markdown(f"• {operator}")
-                    st.markdown("")  # 空行
-        
-        with col2:
-            st.markdown("### 📈 予測される効果")
-            
-            # 効果をカード形式で表示
-            st.markdown(f"""
-            <div style="background: #f0fdf4; border: 2px solid #22c55e; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
-                <div style="text-align: center;">
-                    <span style="font-size: 0.9rem; color: #166534;">生産性</span>
-                    <br>
-                    <span style="font-size: 2rem; font-weight: 700; color: #22c55e;">{suggestion["impact"]["productivity"]}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div style="background: #fef2f2; border: 2px solid #ef4444; padding: 1rem; border-radius: 8px; margin-bottom: 0.5rem;">
-                <div style="text-align: center;">
-                    <span style="font-size: 0.9rem; color: #991b1b;">遅延解消</span>
-                    <br>
-                    <span style="font-size: 2rem; font-weight: 700; color: #ef4444;">{suggestion["impact"]["delay"]}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-            
-            st.markdown(f"""
-            <div style="background: #eff6ff; border: 2px solid #3b82f6; padding: 1rem; border-radius: 8px;">
-                <div style="text-align: center;">
-                    <span style="font-size: 0.9rem; color: #1e40af;">品質</span>
-                    <br>
-                    <span style="font-size: 1.5rem; font-weight: 700; color: #3b82f6;">{suggestion["impact"]["quality"]}</span>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
-        
-        st.info(f"💡 {suggestion['reason']}")
-        
-        # カスタムボタンスタイル
-        st.markdown(f"""
-        <style>
-        .suggestion-buttons-{suggestion['id']} {{
-            display: flex;
-            gap: 1rem;
-            margin-top: 1rem;
-        }}
-        #{suggestion['id']}-approve {{
-            background-color: #22c55e !important;
-            color: white !important;
-        }}
-        #{suggestion['id']}-approve:hover {{
-            background-color: #16a34a !important;
-        }}
-        #{suggestion['id']}-reject {{
-            background-color: #ef4444 !important;
-            color: white !important;
-        }}
-        #{suggestion['id']}-reject:hover {{
-            background-color: #dc2626 !important;
-        }}
-        #{suggestion['id']}-discuss {{
-            background-color: #3b82f6 !important;
-            color: white !important;
-        }}
-        #{suggestion['id']}-discuss:hover {{
-            background-color: #2563eb !important;
-        }}
-        </style>
-        """, unsafe_allow_html=True)
-        
-        col1, col2, col3 = st.columns([1, 1, 1])
-        with col1:
-            st.markdown(f'<span id="{suggestion["id"]}-approve"></span>', unsafe_allow_html=True)
-            if st.button("✅ 承認", key=f"approve_{suggestion['id']}", use_container_width=True):
-                # バックエンドAPIで承認実行
-                result = api_client.execute_approval_action(
-                    approval_id=suggestion['id'],
-                    action="approve",
-                    user="管理者",
-                    user_id="admin001",
-                    reason="チャットから承認",
-                    notes=""
-                )
-
-                if result.get("success"):
-                    message_placeholder.success("✅ 配置変更を承認しました")
-                    send_notification(suggestion)
                 else:
-                    message_placeholder.error(f"❌ 承認に失敗しました: {result.get('error', '不明なエラー')}")
+                    st.markdown("*オペレータ未選定*")
 
-        with col2:
-            st.markdown(f'<span id="{suggestion["id"]}-reject"></span>', unsafe_allow_html=True)
-            if st.button("❌ 却下", key=f"reject_{suggestion['id']}", use_container_width=True):
-                # バックエンドAPIで却下実行
-                result = api_client.execute_approval_action(
-                    approval_id=suggestion['id'],
-                    action="reject",
-                    user="管理者",
-                    user_id="admin001",
-                    reason="却下",
-                    notes=""
-                )
+            with col2:
+                st.markdown("#### 📈 効果")
 
-                if result.get("success"):
-                    message_placeholder.info("❌ 配置変更を却下しました")
-                else:
-                    message_placeholder.error(f"❌ 却下に失敗しました: {result.get('error', '不明なエラー')}")
+                # 効果を簡潔に表示
+                st.markdown(f"""
+                <div style="background: #f0fdf4; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.3rem; text-align: center;">
+                    <span style="font-size: 0.8rem; color: #166534;">生産性</span>
+                    <span style="font-size: 1.2rem; font-weight: 700; color: #22c55e;"> +10%</span>
+                </div>
+                <div style="background: #fef2f2; padding: 0.5rem; border-radius: 4px; margin-bottom: 0.3rem; text-align: center;">
+                    <span style="font-size: 0.8rem; color: #991b1b;">遅延</span>
+                    <span style="font-size: 1.2rem; font-weight: 700; color: #ef4444;"> -15分</span>
+                </div>
+                <div style="background: #eff6ff; padding: 0.5rem; border-radius: 4px; text-align: center;">
+                    <span style="font-size: 0.8rem; color: #1e40af;">品質</span>
+                    <span style="font-size: 1.2rem; font-weight: 700; color: #3b82f6;"> 維持</span>
+                </div>
+                """, unsafe_allow_html=True)
 
-        with col3:
-            st.markdown(f'<span id="{suggestion["id"]}-discuss"></span>', unsafe_allow_html=True)
-            if st.button("💬 詳細を相談", key=f"discuss_{suggestion['id']}", use_container_width=True):
-                message_placeholder.info("💬 詳細な相談モードに移行します")
+            # 承認済み・却下済みの状態を管理（各changeごと）
+            approval_key = f"approval_status_{suggestion['id']}_change_{i}"
+            if approval_key not in st.session_state:
+                st.session_state[approval_key] = None
+
+            # 処理済みの場合はステータスを表示
+            if st.session_state[approval_key] == "approved":
+                st.success("✅ この提案は承認済みです")
+            elif st.session_state[approval_key] == "rejected":
+                st.warning("❌ この提案は却下済みです")
+
+            # 承認/却下ボタン（各changeごと）
+            col1, col2, col3 = st.columns([1, 1, 1])
+            is_processed = st.session_state[approval_key] is not None
+
+            with col1:
+                if st.button("✅ 承認", key=f"approve_{suggestion['id']}_change_{i}", use_container_width=True, disabled=is_processed):
+                    # バックエンドAPIで承認実行
+                    with st.spinner("承認処理中..."):
+                        # 1件の変更だけを承認するためのsuggestionを作成
+                        single_change_suggestion = {
+                            "id": f"{suggestion['id']}_change_{i}",
+                            "changes": [change],
+                            "impact": suggestion.get("impact", {}),
+                            "reason": f"提案{i}を個別承認",
+                            "confidence_score": suggestion.get("confidence_score", 0.85)
+                        }
+
+                        result = api_client.execute_approval_action(
+                            approval_id=single_change_suggestion['id'],
+                            action="approve",
+                            user="管理者",
+                            user_id="admin001",
+                            reason=f"提案{i}をチャットから承認",
+                            notes=""
+                        )
+
+                    if result.get("success"):
+                        st.success(f"✅ 提案{i}を承認しました")
+                        st.session_state[approval_key] = "approved"
+                        st.rerun()
+                    else:
+                        st.error(f"❌ 承認失敗: {result.get('error', '不明なエラー')}")
+
+            with col2:
+                if st.button("❌ 却下", key=f"reject_{suggestion['id']}_change_{i}", use_container_width=True, disabled=is_processed):
+                    # バックエンドAPIで却下実行
+                    with st.spinner("却下処理中..."):
+                        single_change_suggestion = {
+                            "id": f"{suggestion['id']}_change_{i}",
+                            "changes": [change],
+                            "impact": suggestion.get("impact", {}),
+                            "reason": f"提案{i}を個別却下",
+                            "confidence_score": suggestion.get("confidence_score", 0.85)
+                        }
+
+                        result = api_client.execute_approval_action(
+                            approval_id=single_change_suggestion['id'],
+                            action="reject",
+                            user="管理者",
+                            user_id="admin001",
+                            reason=f"提案{i}をチャットから却下",
+                            notes=""
+                        )
+
+                    if result.get("success"):
+                        st.warning(f"❌ 提案{i}を却下しました")
+                        st.session_state[approval_key] = "rejected"
+                        st.rerun()
+                    else:
+                        st.error(f"❌ 却下失敗: {result.get('error', '不明なエラー')}")
+
+            with col3:
+                if st.button("💬 相談", key=f"discuss_{suggestion['id']}_change_{i}", use_container_width=True):
+                    st.info(f"💬 提案{i}の詳細相談モード")
+
+
+def show_debug_info(debug_info):
+    """デバッグ情報を表示"""
+    with st.expander("🔍 デバッグ情報（開発者向け）", expanded=False):
+
+        # 1. 意図解析
+        if debug_info.get("intent_analysis"):
+            st.subheader("1️⃣ 意図解析")
+            intent = debug_info["intent_analysis"]
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Intent Type", intent.get("raw_intent", {}).get("intent_type", "N/A"))
+            with col2:
+                st.metric("Location", intent.get("extracted_location", "N/A"))
+            with col3:
+                st.metric("Process", intent.get("extracted_process", "N/A"))
+
+            # expanderの代わりにst.json()を直接使用
+            st.write("**詳細JSON:**")
+            st.json(intent)
+
+        # 2. RAG検索結果
+        if debug_info.get("rag_results"):
+            st.subheader("2️⃣ RAG検索結果")
+            rag = debug_info["rag_results"]
+
+            st.write(f"**検索結果数**: {rag.get('manager_rules_count', 0)}件")
+
+            if rag.get("manager_rules"):
+                for i, rule in enumerate(rag["manager_rules"], 1):
+                    st.markdown(f"**ルール{i}**: {rule.get('title', 'N/A')} (類似度: {rule.get('similarity', 0):.3f})")
+                    st.write(f"カテゴリ: {rule.get('category', 'N/A')}")
+                    st.code(rule.get('rule_text', '')[:200], language=None)
+
+        # 3. データベースクエリ
+        if debug_info.get("database_queries"):
+            st.subheader("3️⃣ データベースクエリ")
+            db_queries = debug_info["database_queries"]
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("実行クエリ数", len(db_queries.get("executed_queries", [])))
+            with col2:
+                st.metric("総レコード数", db_queries.get("total_records", 0))
+
+            # SQL文を表示
+            if db_queries.get("executed_queries"):
+                for i, query_info in enumerate(db_queries["executed_queries"], 1):
+                    st.markdown(f"**SQL {i}** ({query_info.get('intent_type', 'N/A')})")
+                    st.code(query_info.get("sql", "")[:500], language="sql")
+                    if query_info.get("params"):
+                        st.write("パラメータ:", query_info["params"])
+                    st.markdown("---")
+
+        # 4. スキルマッチング詳細
+        if debug_info.get("skill_matching"):
+            st.subheader("4️⃣ スキルマッチング詳細")
+            st.json(debug_info["skill_matching"])
+
+        # 5. 処理時間
+        if debug_info.get("processing_time"):
+            st.subheader("5️⃣ 処理時間内訳")
+            st.json(debug_info["processing_time"])
 
 
 if __name__ == "__main__":

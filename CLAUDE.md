@@ -1,6 +1,144 @@
 # AIMEE プロジェクト情報
 
-**最終更新**: 2025-10-24
+**最終更新**: 2025-10-26
+
+## ⚠️ プロジェクトルール（重要）
+
+### 1. ドキュメント管理ルール
+
+**✅ 原則**: **新しいドキュメントを作らず、既存のものを上書きする**
+
+- 新機能実装やバグ修正の際、新しいMarkdownファイルを作成しない
+- 既存のマスタードキュメントを更新する
+- 追記が必要な場合は、既存ドキュメントの該当セクションに追記
+
+**マスタードキュメント（上書き対象）**:
+1. **[README.md](README.md)** - プロジェクト概要、最新機能
+2. **[QUICK_REFERENCE.md](QUICK_REFERENCE.md)** - 全情報（DB、モデル、API等）
+3. **[CLAUDE.md](CLAUDE.md)** - このファイル（プロジェクト詳細）
+4. **[SYSTEM_OVERVIEW.md](SYSTEM_OVERVIEW.md)** - システム全体図
+5. **[IMPLEMENTATION_LOG.md](IMPLEMENTATION_LOG.md)** - 実装作業ログ
+6. **[INSTALLATION_GUIDE.md](INSTALLATION_GUIDE.md)** - セットアップ手順
+7. **[DEPLOY_GUIDE.md](DEPLOY_GUIDE.md)** - デプロイ手順
+8. **[DEMO_SCRIPT_FINAL.md](DEMO_SCRIPT_FINAL.md)** - デモスクリプト
+9. **[00_INDEX.md](00_INDEX.md)** - プロジェクト索引
+
+**例外**: 以下の場合のみ新規ドキュメント作成を許可
+- バグ報告書（documents/reports/bug_reports/）
+- 新機能の要件分析（documents/reports/requirement_analysis/）
+
+---
+
+### 2. 対応ログへの追記ルール
+
+**✅ 原則**: **何か対応するたびにCHANGELOG.mdに追記する**
+
+- バグ修正、機能追加、データ修正を行った際は必ず記録
+- IMPLEMENTATION_LOG.mdは大規模な実装のみ
+- CHANGELOG.mdは日常的な対応を記録
+
+**記録すべき内容**:
+- 問題・背景
+- 対応内容
+- 修正ファイル
+- テスト結果
+- 影響範囲
+
+**記録フォーマット**:
+```markdown
+### YYYY-MM-DD HH:MM - [カテゴリ] タイトル
+
+**問題・背景**: ...
+**対応内容**: ...
+**修正ファイル**: ...
+**テスト結果**: ...
+**影響範囲**: ...
+```
+
+**カテゴリ例**:
+- [バグ修正]
+- [機能追加]
+- [データ修正]
+- [パフォーマンス]
+- [ドキュメント]
+
+**参照**: [CHANGELOG.md](CHANGELOG.md)
+
+---
+
+### 3. データベース管理ルール
+
+**✅ 原則**: **データベースの挿入データを常に正しく保つ**
+
+#### 必須確認事項
+
+**開発・テスト時**:
+1. ローカルDBの状態を常に確認
+   ```bash
+   cd /Users/umemiya/Desktop/erax/aimee-db
+   python3 -c "
+   from config import db_manager
+   tables = ['operators', 'operator_process_capabilities', 'progress_snapshots']
+   for t in tables:
+       result = db_manager.execute_query(f'SELECT COUNT(*) as c FROM {t};')
+       print(f'{t}: {result[0][\"c\"]}件')
+   "
+   ```
+
+2. 期待値との照合
+   - operators: 100件（モック名）
+   - operator_process_capabilities: 191件
+   - progress_snapshots: 832件
+
+3. データ不足時は即座に投入
+   ```bash
+   # progress_snapshotsが0件の場合
+   cd /Users/umemiya/Desktop/erax/aimee-db
+   python3 extract_and_import_snapshots.py
+
+   # ChromaDBが空の場合
+   python3 import_manager_knowledge_to_chroma.py
+   ```
+
+**本番環境（AWS RDS）デプロイ時**:
+1. RDSの状態を確認
+   ```bash
+   ssh -i ~/.ssh/aimee-key.pem ubuntu@54.150.242.233 \
+       "docker exec aimee-be-mysql-1 mysql -u admin -p'Aimee2024!RDS' \
+       -h aimee-db.c96uew4c8z02.ap-northeast-1.rds.amazonaws.com \
+       aimee_db -e 'SELECT COUNT(*) FROM operators;'"
+   ```
+
+2. データ投入が必要な場合
+   ```bash
+   # モック名データ投入
+   mysql -u admin -p'Aimee2024!RDS' \
+       -h aimee-db.c96uew4c8z02.ap-northeast-1.rds.amazonaws.com \
+       aimee_db < real_data_with_mock_names.sql
+   ```
+
+#### データ整合性チェック
+
+**実装後・デプロイ後の必須確認**:
+- [ ] operators テーブルに100件のデータがあるか
+- [ ] operator_process_capabilities に191件のデータがあるか
+- [ ] progress_snapshots に832件のデータがあるか
+- [ ] ChromaDB に aimee_knowledge コレクション（12件）があるか
+- [ ] approval_history テーブルが存在するか
+
+**データ不足時の影響**:
+- APIが「現在のリソースで対応可能です」しか返さない
+- 配置提案が生成されない
+- テスト精度が低下
+
+**⚠️ 重要な注意事項**:
+- **実名2,664名のデータは現在存在しない**
+- 01_real_data_only.sqlはスキーマのみ（実データ含まず）
+- 実際に使用可能なのは**モック100名**（real_data_with_mock_names.sql）のみ
+
+**詳細**: [../aimee-db/DATABASE_STATUS.md](../aimee-db/DATABASE_STATUS.md) を参照
+
+---
 
 ## プロジェクト概要
 
@@ -578,7 +716,15 @@ mysql -u aimee_user -p'Aimee2024!' aimee_db -e "SHOW TABLES;"
 
 ## 更新履歴
 
-- **2025-10-26**: 承認・否認機能のDB保存対応完了 🎉
+- **2025-10-26 (v3)**: ファイル整理・モデル復元 🎉
+  - ファイル整理実施（26件削除、198KB削減）
+  - 00_INDEX.md作成（プロジェクト完全索引）
+  - プロジェクトルール追加（ドキュメント管理、DB管理）
+  - **MAIN_MODEL復元**: gemma2:2b → gemma3:4b
+  - モデル変更理由の特定と修正
+  - デグレ防止テスト実施（API精度95.8%）
+
+- **2025-10-26 (v2)**: 承認・否認機能のDB保存対応完了 🎉
   - approval_history への完全対応
   - Pydantic v2対応（model_dump）
   - 承認・否認ボタンのDB登録成功
@@ -674,6 +820,11 @@ PYEOF
 ## 📚 重要なドキュメント
 
 ### 🔥 最重要
+- **[00_INDEX.md](./00_INDEX.md)** ⭐️⭐️⭐️⭐️⭐️ - **プロジェクト完全索引**
+  - 全ドキュメント・スクリプトへのリンク
+  - 用途別検索ガイド
+  - クイックコマンド集
+
 - **[QUICK_REFERENCE.md](./QUICK_REFERENCE.md)** ⭐️⭐️⭐️⭐️ - **全ての最新情報を1ページで**
   - DB環境（ローカル/AWS RDS）
   - AI/LLMモデル（qwen2、gemma2、ChromaDB）
